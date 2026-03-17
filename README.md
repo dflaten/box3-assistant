@@ -38,23 +38,46 @@ Recommended options:
 - use `idf.py menuconfig` and keep secrets in `sdkconfig` only
 - or create a local `sdkconfig.defaults.local` file based on [sdkconfig.defaults.local.example](/home/david/projects/esp-projects/box3-assistant/sdkconfig.defaults.local.example)
 
-`sdkconfig` and `sdkconfig.defaults.local` are ignored by git.
+Both `sdkconfig` and `sdkconfig.defaults.local` are ignored by git.
 
-If you want to build with a local defaults override file, run:
+Important distinction:
+
+- `sdkconfig.defaults.local` is a local input file that seeds config values
+- `sdkconfig` is the generated effective config that ESP-IDF actually builds with
+
+That means your Wi-Fi password can exist in `sdkconfig` locally even if you only typed it into `sdkconfig.defaults.local`. That is expected. The important part is that neither file is committed.
+
+If `sdkconfig` already contains stale values, ESP-IDF will keep using them until you regenerate it. In that case, remove `sdkconfig` and `sdkconfig.old`, then reconfigure with your local defaults file enabled.
+
+If you want to build with a local defaults override file in `fish`, run:
 
 ```fish
 cd /home/david/projects/esp-projects/box3-assistant
 get_idf
 set -x SDKCONFIG_DEFAULTS "sdkconfig.defaults;sdkconfig.defaults.local"
+rm -f sdkconfig sdkconfig.old
+idf.py reconfigure
 idf.py build
 ```
 
-For flashing with the same local override:
+In `bash`, use `export` instead:
+
+```bash
+cd /home/david/projects/esp-projects/box3-assistant
+export SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.local"
+rm -f sdkconfig sdkconfig.old
+idf.py reconfigure
+idf.py build
+```
+
+For flashing with the same local override in `fish`:
 
 ```fish
 cd /home/david/projects/esp-projects/box3-assistant
 get_idf
 set -x SDKCONFIG_DEFAULTS "sdkconfig.defaults;sdkconfig.defaults.local"
+rm -f sdkconfig sdkconfig.old
+idf.py reconfigure
 idf.py -p /dev/ttyACM0 flash monitor
 ```
 
@@ -79,12 +102,16 @@ CONFIG_HUE_WIFI_SSID="your-ssid"
 CONFIG_HUE_WIFI_PASSWORD="your-password"
 ```
 
-When building or flashing from a fresh shell, include the local defaults file:
+When building or flashing from a fresh shell, include the local defaults file and regenerate `sdkconfig` if needed:
 
 ```fish
 cd /home/david/projects/esp-projects/box3-assistant
 get_idf
 set -x SDKCONFIG_DEFAULTS "sdkconfig.defaults;sdkconfig.defaults.local"
+rm -f sdkconfig sdkconfig.old
+idf.py reconfigure
+grep CONFIG_HUE_WIFI_SSID sdkconfig
+grep CONFIG_HUE_WIFI_PASSWORD sdkconfig
 idf.py build
 ```
 
@@ -94,7 +121,31 @@ Or to flash and monitor:
 cd /home/david/projects/esp-projects/box3-assistant
 get_idf
 set -x SDKCONFIG_DEFAULTS "sdkconfig.defaults;sdkconfig.defaults.local"
+rm -f sdkconfig sdkconfig.old
+idf.py reconfigure
+grep CONFIG_HUE_WIFI_SSID sdkconfig
+grep CONFIG_HUE_WIFI_PASSWORD sdkconfig
 idf.py -p /dev/ttyACM0 flash monitor
 ```
 
-The `set -x SDKCONFIG_DEFAULTS ...` command only applies to the current shell session. The credentials stored in `sdkconfig.defaults.local` remain on disk, but you need to set the environment variable again in each new terminal.
+The `set -x SDKCONFIG_DEFAULTS ...` command only applies to the current shell session. The credentials stored in `sdkconfig.defaults.local` remain on disk, but you need to set the environment variable again in each new terminal. If `grep` still shows empty strings, the build is not using your local defaults file yet.
+
+## Wake Word And Commands
+
+The current assistant flow is:
+
+1. wait in standby for the wake word
+2. wake up and listen for one command
+3. execute the command
+4. return to standby
+
+Current wake word:
+
+- `Hi ESP`
+
+Current supported voice commands:
+
+- `turn on living room`
+- `turn off living room`
+
+Note: the firmware uses Espressif's built-in `Hi, ESP` WakeNet model (`wn9s_hiesp`) for this wake-word flow. Say `Hi ESP` when testing the current firmware. The command set now uses Espressif MultiNet5 English phoneme definitions generated for the living-room phrases.
