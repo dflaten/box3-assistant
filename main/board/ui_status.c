@@ -14,7 +14,7 @@
 
 #include "bsp/esp-box-3.h"
 
-#include "ui_status.h"
+#include "board/ui_status.h"
 
 static const char *TAG = "hue-voice";
 

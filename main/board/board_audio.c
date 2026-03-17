@@ -3,7 +3,7 @@
 
 #include "bsp/esp-box-3.h"
 
-#include "board_audio.h"
+#include "board/board_audio.h"
 
 static const char *TAG = "hue-voice";
 

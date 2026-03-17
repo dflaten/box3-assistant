@@ -9,7 +9,7 @@
 #include "esp_netif.h"
 #include "esp_wifi.h"
 
-#include "wifi_support.h"
+#include "system/wifi_support.h"
 
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT      BIT1

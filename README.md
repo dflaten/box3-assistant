@@ -132,7 +132,16 @@ The `set -x SDKCONFIG_DEFAULTS ...` command only applies to the current shell se
 
 ## Wake Word And Commands
 
-The current assistant flow is:
+The expected boot flow after flashing is:
+
+1. boot the firmware
+2. connect to Wi-Fi
+3. load the speech models
+4. automatically refresh Hue groups once from the bridge
+5. fall back to the last saved group list if the Hue refresh fails
+6. enter standby and wait for the wake word
+
+The current assistant interaction flow is:
 
 1. wait in standby for the wake word
 2. wake up and listen for one command
@@ -143,9 +152,25 @@ Current wake word:
 
 - `Hi ESP`
 
-Current supported voice commands:
+Current always-available voice command:
+
+- `update groups from hue`
+
+On boot, the firmware now automatically attempts a Hue group refresh after Wi-Fi connects so a newly flashed device can rebuild its group command list without requiring a manual sync. The `update groups from hue` command is still available to force a refresh later.
+
+After a successful sync, the firmware fetches the Hue groups list from the bridge, normalizes the spoken names, saves the accepted groups to the `storage` partition, and rebuilds the active MultiNet command table.
+
+After a successful sync, the firmware supports commands like:
 
 - `turn on living room`
 - `turn off living room`
+- `turn on kitchen`
+- `turn off office`
 
-Note: the firmware uses Espressif's built-in `Hi, ESP` WakeNet model (`wn9s_hiesp`) for this wake-word flow. Say `Hi ESP` when testing the current firmware. The command set now uses Espressif MultiNet5 English phoneme definitions generated for the living-room phrases.
+Current limits:
+
+- only the first 6 usable Hue groups are added as direct voice commands
+- group names are normalized into simple spoken forms before they become commands
+- synced groups persist across power cycles, but you may need to resync after reflashing if the `storage` partition is erased or rewritten
+
+Note: the firmware uses Espressif's built-in `Hi, ESP` WakeNet model (`wn9s_hiesp`) for this wake-word flow. Say `Hi ESP` when testing the current firmware.

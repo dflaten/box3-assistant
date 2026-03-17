@@ -18,28 +18,30 @@
 #include "esp_mn_iface.h"
 #include "esp_mn_models.h"
 #include "esp_mn_speech_commands.h"
-#include "esp_process_sdkconfig.h"
 #include "esp_wn_models.h"
 #include "esp_codec_dev.h"
+#include "flite_g2p.h"
 #include "model_path.h"
 
-#include "board_audio.h"
-#include "hue_client.h"
-#include "wifi_support.h"
-#include "ui_status.h"
+#include "board/board_audio.h"
+#include "hue/hue_client.h"
+#include "hue/hue_group_store.h"
+#include "board/ui_status.h"
+#include "system/wifi_support.h"
 
-
-#define HUE_CMD_ON  1
-#define HUE_CMD_OFF 2
+#define CMD_SYNC_GROUPS 1
+#define CMD_GROUP_BASE  100
 
 #define COMMAND_WINDOW_MS 10000
 #define COMMAND_MIN_LISTEN_MS 3000
+#define MAX_SYNCED_GROUPS HUE_GROUP_MAX_COUNT
 
 static const char *TAG = "hue-voice";
 static const char *WAKE_WORD = "Hi ESP";
 static const TickType_t STATUS_HOLD_TIME = pdMS_TO_TICKS(1200);
 
 static bool s_assistant_awake;
+static bool s_commands_allocated;
 
 static esp_mn_iface_t *s_multinet = NULL;
 static model_iface_data_t *s_model_data = NULL;
@@ -47,17 +49,50 @@ static const esp_afe_sr_iface_t *s_afe_handle = NULL;
 static esp_afe_sr_data_t *s_afe_data = NULL;
 static esp_codec_dev_handle_t s_mic_codec = NULL;
 
-// Reset the post-wake command state and re-arm wake-word detection.
+static hue_group_t s_groups[MAX_SYNCED_GROUPS];
+static size_t s_group_count;
+
+static int group_command_id(size_t index, bool on)
+{
+    return CMD_GROUP_BASE + (int)(index * 2) + (on ? 0 : 1);
+}
+
+static bool decode_group_command_id(int command_id, size_t *group_index, bool *on)
+{
+    if (command_id < CMD_GROUP_BASE) {
+        return false;
+    }
+
+    int offset = command_id - CMD_GROUP_BASE;
+    size_t index = (size_t)(offset / 2);
+    if (index >= s_group_count) {
+        return false;
+    }
+
+    if (group_index != NULL) {
+        *group_index = index;
+    }
+    if (on != NULL) {
+        *on = (offset % 2) == 0;
+    }
+    return true;
+}
+
 static const char *friendly_command_text(int command_id)
 {
-    switch (command_id) {
-    case HUE_CMD_ON:
-        return "Turn on living room";
-    case HUE_CMD_OFF:
-        return "Turn off living room";
-    default:
-        return "Unknown command";
+    static char text[96];
+    if (command_id == CMD_SYNC_GROUPS) {
+        return "Update groups from Hue";
     }
+
+    size_t index = 0;
+    bool on = false;
+    if (decode_group_command_id(command_id, &index, &on)) {
+        snprintf(text, sizeof(text), "Turn %s %s", on ? "on" : "off", s_groups[index].name);
+        return text;
+    }
+
+    return "Unknown command";
 }
 
 static void return_to_standby(void)
@@ -72,21 +107,80 @@ static void return_to_standby(void)
     ESP_LOGI(TAG, "Assistant returned to standby");
 }
 
-static esp_err_t init_speech_commands(void)
+static esp_err_t add_runtime_phrase(int command_id, const char *text)
 {
-    esp_mn_error_t *err = esp_mn_commands_update_from_sdkconfig(s_multinet, s_model_data);
+    char *phonemes = flite_g2p(text, 1);
+    if (phonemes == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    esp_err_t err = esp_mn_commands_phoneme_add(command_id, text, phonemes);
+    free(phonemes);
+    return err;
+}
+
+static esp_err_t rebuild_command_table(void)
+{
+    if (!s_commands_allocated) {
+        ESP_RETURN_ON_ERROR(esp_mn_commands_alloc(s_multinet, s_model_data), TAG, "Failed to allocate command table");
+        s_commands_allocated = true;
+    } else {
+        ESP_RETURN_ON_ERROR(esp_mn_commands_clear(), TAG, "Failed to clear command table");
+    }
+
+    ESP_RETURN_ON_ERROR(add_runtime_phrase(CMD_SYNC_GROUPS, "update groups from hue"), TAG, "Failed to add sync command");
+
+    for (size_t i = 0; i < s_group_count; ++i) {
+        char on_phrase[96];
+        char off_phrase[96];
+        snprintf(on_phrase, sizeof(on_phrase), "turn on %s", s_groups[i].name);
+        snprintf(off_phrase, sizeof(off_phrase), "turn off %s", s_groups[i].name);
+
+        ESP_RETURN_ON_ERROR(add_runtime_phrase(group_command_id(i, true), on_phrase), TAG, "Failed to add on command");
+        ESP_RETURN_ON_ERROR(add_runtime_phrase(group_command_id(i, false), off_phrase), TAG, "Failed to add off command");
+    }
+
+    esp_mn_error_t *err = esp_mn_commands_update();
     if (err != NULL) {
-        ESP_LOGE(TAG, "Failed to load speech commands from sdkconfig phoneme table");
+        ESP_LOGE(TAG, "Failed to update MultiNet command table");
+        for (int i = 0; i < err->num; ++i) {
+            if (err->phrases[i] != NULL) {
+                ESP_LOGE(TAG, "Rejected phrase: %s", err->phrases[i]->string);
+            }
+        }
         return ESP_FAIL;
     }
 
+    esp_mn_commands_print();
     esp_mn_active_commands_print();
+    return ESP_OK;
+}
+
+static esp_err_t load_groups_from_storage(void)
+{
+    size_t count = 0;
+    ESP_RETURN_ON_ERROR(hue_group_store_load(s_groups, MAX_SYNCED_GROUPS, &count), TAG, "Failed to load stored Hue groups");
+    s_group_count = count;
+    return ESP_OK;
+}
+
+static esp_err_t sync_groups_from_hue(void)
+{
+    size_t synced_count = 0;
+    ESP_RETURN_ON_ERROR(hue_client_sync_groups(s_groups, MAX_SYNCED_GROUPS, &synced_count),
+                        TAG,
+                        "Failed to sync Hue groups");
+    s_group_count = synced_count;
+
+    ESP_RETURN_ON_ERROR(hue_group_store_save(s_groups, s_group_count), TAG, "Failed to save Hue groups");
+    ESP_RETURN_ON_ERROR(rebuild_command_table(), TAG, "Failed to rebuild command table after Hue sync");
+
+    ESP_LOGI(TAG, "Synced %u usable Hue group(s)", (unsigned)s_group_count);
     return ESP_OK;
 }
 
 static esp_err_t init_models(void)
 {
-    // Speech models are loaded from the dedicated "model" flash partition.
     srmodel_list_t *models = esp_srmodel_init("model");
     if (models == NULL || models->num == 0) {
         ESP_LOGE(TAG, "No speech models found in the 'model' partition");
@@ -149,12 +243,11 @@ static esp_err_t init_models(void)
     }
 
     s_afe_handle->print_pipeline(s_afe_data);
-    return init_speech_commands();
+    return rebuild_command_table();
 }
 
 static void audio_feed_task(void *arg)
 {
-    // Feed raw PCM from the BOX-3 microphone into the AFE continuously on its own task.
     const int feed_chunks = s_afe_handle->get_feed_chunksize(s_afe_data);
     const int feed_channels = s_afe_handle->get_feed_channel_num(s_afe_data);
     const size_t feed_samples = (size_t)feed_chunks * (size_t)feed_channels;
@@ -199,7 +292,6 @@ static void speech_detect_task(void *arg)
 
         if (!s_assistant_awake) {
             if (afe_result->wakeup_state == WAKENET_DETECTED) {
-                // Once awake, disable WakeNet and let MultiNet consume the AFE output.
                 s_assistant_awake = true;
                 wake_tick = xTaskGetTickCount();
                 s_multinet->clean(s_model_data);
@@ -217,7 +309,6 @@ static void speech_detect_task(void *arg)
         }
 
         if (mn_state == ESP_MN_STATE_TIMEOUT) {
-            // MultiNet can report timeout early; keep listening briefly so the user can finish speaking.
             if (elapsed_ms < COMMAND_MIN_LISTEN_MS) {
                 ESP_LOGI(TAG, "Ignoring early timeout at %lu ms after wake word", (unsigned long)elapsed_ms);
                 continue;
@@ -253,12 +344,16 @@ static void speech_detect_task(void *arg)
         ui_status_set(UI_STATUS_WORKING, command_text);
 
         esp_err_t action_err = ESP_FAIL;
-        if (command_id == HUE_CMD_ON) {
-            action_err = hue_client_set_group(true);
-        } else if (command_id == HUE_CMD_OFF) {
-            action_err = hue_client_set_group(false);
+        if (command_id == CMD_SYNC_GROUPS) {
+            action_err = sync_groups_from_hue();
         } else {
-            ESP_LOGW(TAG, "Unhandled command id %d", command_id);
+            size_t group_index = 0;
+            bool on = false;
+            if (decode_group_command_id(command_id, &group_index, &on)) {
+                action_err = hue_client_set_group_by_id(s_groups[group_index].id, on);
+            } else {
+                ESP_LOGW(TAG, "Unhandled command id %d", command_id);
+            }
         }
 
         if (action_err == ESP_OK) {
@@ -285,11 +380,22 @@ void app_main(void)
     ESP_ERROR_CHECK(ui_status_init());
     ui_status_set(UI_STATUS_BOOTING, NULL);
 
+    ESP_ERROR_CHECK(hue_group_store_init());
+    ESP_ERROR_CHECK(load_groups_from_storage());
+
     ui_status_set(UI_STATUS_CONNECTING, NULL);
     ESP_ERROR_CHECK(wifi_init_sta());
 
     ui_status_set(UI_STATUS_BOOTING, "Loading speech models");
     ESP_ERROR_CHECK(init_models());
+
+    ui_status_set(UI_STATUS_BOOTING, "Updating Hue groups");
+    esp_err_t sync_err = sync_groups_from_hue();
+    if (sync_err != ESP_OK) {
+        ESP_LOGW(TAG, "Boot-time Hue sync failed: %s", esp_err_to_name(sync_err));
+        ESP_ERROR_CHECK(rebuild_command_table());
+    }
+
     ESP_ERROR_CHECK(board_audio_init_microphone(&s_mic_codec));
 
     ui_status_set(UI_STATUS_READY, NULL);
