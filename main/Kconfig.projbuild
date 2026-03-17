@@ -1,0 +1,33 @@
+menu "Hue Voice"
+
+config HUE_WIFI_SSID
+    string "Wi-Fi SSID"
+    default ""
+
+config HUE_WIFI_PASSWORD
+    string "Wi-Fi password"
+    default ""
+
+config HUE_WIFI_MAXIMUM_RETRY
+    int "Wi-Fi connection retries"
+    range 1 100
+    default 10
+
+config HUE_BRIDGE_IP
+    string "Hue bridge IP address"
+    default "192.168.68.60"
+
+config HUE_BRIDGE_API_KEY
+    string "Hue bridge API key"
+    default ""
+
+config HUE_BRIDGE_GROUP_ID
+    string "Hue group ID"
+    default "2"
+
+config HUE_MIC_GAIN_DB
+    int "Microphone gain in dB"
+    range 0 37
+    default 30
+
+endmenu
