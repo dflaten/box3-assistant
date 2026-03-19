@@ -28,20 +28,25 @@
 #include "hue/hue_group_store.h"
 #include "board/ui_status.h"
 #include "system/wifi_support.h"
+#include "weather/weather_client.h"
 
 #define CMD_SYNC_GROUPS 1
+#define CMD_WEATHER_TODAY 2
 #define CMD_GROUP_BASE  100
 
 #define COMMAND_WINDOW_MS 10000
 #define COMMAND_MIN_LISTEN_MS 3000
 #define MAX_SYNCED_GROUPS HUE_GROUP_MAX_COUNT
+#define WEATHER_STATUS_HOLD_MS 15000
 
 static const char *TAG = "hue-voice";
 static const char *WAKE_WORD = "Hi ESP";
 static const TickType_t STATUS_HOLD_TIME = pdMS_TO_TICKS(1200);
+static const TickType_t WEATHER_STATUS_HOLD_TIME = pdMS_TO_TICKS(WEATHER_STATUS_HOLD_MS);
 
 static bool s_assistant_awake;
 static bool s_commands_allocated;
+static volatile bool s_pause_audio_feed;
 
 static esp_mn_iface_t *s_multinet = NULL;
 static model_iface_data_t *s_model_data = NULL;
@@ -83,6 +88,9 @@ static const char *friendly_command_text(int command_id)
     static char text[96];
     if (command_id == CMD_SYNC_GROUPS) {
         return "Update groups from Hue";
+    }
+    if (command_id == CMD_WEATHER_TODAY) {
+        return "Weather today";
     }
 
     size_t index = 0;
@@ -129,6 +137,7 @@ static esp_err_t rebuild_command_table(void)
     }
 
     ESP_RETURN_ON_ERROR(add_runtime_phrase(CMD_SYNC_GROUPS, "update groups from hue"), TAG, "Failed to add sync command");
+    ESP_RETURN_ON_ERROR(add_runtime_phrase(CMD_WEATHER_TODAY, "weather today"), TAG, "Failed to add weather command");
 
     for (size_t i = 0; i < s_group_count; ++i) {
         char on_phrase[96];
@@ -246,6 +255,11 @@ static esp_err_t init_models(void)
     return rebuild_command_table();
 }
 
+static void audio_feed_set_paused(bool paused)
+{
+    s_pause_audio_feed = paused;
+}
+
 static void audio_feed_task(void *arg)
 {
     const int feed_chunks = s_afe_handle->get_feed_chunksize(s_afe_data);
@@ -263,6 +277,11 @@ static void audio_feed_task(void *arg)
              WAKE_WORD, feed_chunks, feed_channels);
 
     while (true) {
+        if (s_pause_audio_feed) {
+            vTaskDelay(pdMS_TO_TICKS(20));
+            continue;
+        }
+
         int ret = esp_codec_dev_read(s_mic_codec, feed_buffer, feed_bytes);
         if (ret != ESP_CODEC_DEV_OK) {
             ESP_LOGW(TAG, "Microphone read failed: %d", ret);
@@ -344,8 +363,19 @@ static void speech_detect_task(void *arg)
         ui_status_set(UI_STATUS_WORKING, command_text);
 
         esp_err_t action_err = ESP_FAIL;
+        char action_detail[WEATHER_DETAIL_TEXT_LEN] = { 0 };
+        TickType_t hold_time = STATUS_HOLD_TIME;
         if (command_id == CMD_SYNC_GROUPS) {
             action_err = sync_groups_from_hue();
+        } else if (command_id == CMD_WEATHER_TODAY) {
+            weather_report_t report = { 0 };
+            audio_feed_set_paused(true);
+            action_err = weather_client_fetch_today(&report);
+            audio_feed_set_paused(false);
+            if (action_err == ESP_OK) {
+                weather_client_format_detail(&report, action_detail, sizeof(action_detail));
+                hold_time = WEATHER_STATUS_HOLD_TIME;
+            }
         } else {
             size_t group_index = 0;
             bool on = false;
@@ -357,12 +387,12 @@ static void speech_detect_task(void *arg)
         }
 
         if (action_err == ESP_OK) {
-            ui_status_set(UI_STATUS_SUCCESS, command_text);
+            ui_status_set(UI_STATUS_SUCCESS, action_detail[0] != '\0' ? action_detail : command_text);
         } else {
             ui_status_set(UI_STATUS_ERROR, command_text);
         }
 
-        vTaskDelay(STATUS_HOLD_TIME);
+        vTaskDelay(hold_time);
         return_to_standby();
         ui_status_set(UI_STATUS_READY, NULL);
     }

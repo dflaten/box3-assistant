@@ -30,4 +30,13 @@ config HUE_MIC_GAIN_DB
     range 0 37
     default 30
 
+config WEATHER_BASE_URL
+    string "Open-Meteo base URL"
+    default "https://api.open-meteo.com"
+
+config WEATHER_TIMEOUT_MS
+    int "Weather request timeout in ms"
+    range 1000 30000
+    default 8000
+
 endmenu

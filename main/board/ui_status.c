@@ -44,8 +44,20 @@ typedef struct {
 static const glyph_t s_font[] = {
     {' ', {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}},
     {'!', {0x04, 0x04, 0x04, 0x04, 0x04, 0x00, 0x04}},
+    {'%', {0x19, 0x19, 0x02, 0x04, 0x08, 0x13, 0x13}},
+    {'/', {0x01, 0x02, 0x02, 0x04, 0x08, 0x08, 0x10}},
     {'-', {0x00, 0x00, 0x00, 0x1F, 0x00, 0x00, 0x00}},
     {'.', {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04}},
+    {'0', {0x0E, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0E}},
+    {'1', {0x04, 0x0C, 0x04, 0x04, 0x04, 0x04, 0x0E}},
+    {'2', {0x0E, 0x11, 0x01, 0x02, 0x04, 0x08, 0x1F}},
+    {'3', {0x1E, 0x01, 0x01, 0x06, 0x01, 0x01, 0x1E}},
+    {'4', {0x02, 0x06, 0x0A, 0x12, 0x1F, 0x02, 0x02}},
+    {'5', {0x1F, 0x10, 0x10, 0x1E, 0x01, 0x01, 0x1E}},
+    {'6', {0x0E, 0x10, 0x10, 0x1E, 0x11, 0x11, 0x0E}},
+    {'7', {0x1F, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08}},
+    {'8', {0x0E, 0x11, 0x11, 0x0E, 0x11, 0x11, 0x0E}},
+    {'9', {0x0E, 0x11, 0x11, 0x0F, 0x01, 0x01, 0x0E}},
     {'A', {0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11}},
     {'B', {0x1E, 0x11, 0x11, 0x1E, 0x11, 0x11, 0x1E}},
     {'C', {0x0E, 0x11, 0x10, 0x10, 0x10, 0x11, 0x0E}},
@@ -246,6 +258,34 @@ static void draw_text_centered(int y, int scale, uint16_t color, const char *tex
     }
 }
 
+static void draw_text_block_centered(int start_y, int scale, uint16_t color, const char *text)
+{
+    if (text == NULL || text[0] == '\0') {
+        return;
+    }
+
+    const int line_height = (7 * scale) + (scale * 2);
+    const char *line_start = text;
+    int line_index = 0;
+
+    while (*line_start != '\0') {
+        const char *line_end = strchr(line_start, '\n');
+        size_t line_len = line_end != NULL ? (size_t)(line_end - line_start) : strlen(line_start);
+        char line[64];
+        size_t copy_len = line_len < sizeof(line) - 1 ? line_len : sizeof(line) - 1;
+        memcpy(line, line_start, copy_len);
+        line[copy_len] = '\0';
+
+        draw_text_centered(start_y + (line_index * line_height), scale, color, line);
+        line_index++;
+
+        if (line_end == NULL) {
+            break;
+        }
+        line_start = line_end + 1;
+    }
+}
+
 static void render_status(ui_status_state_t state, const char *detail)
 {
     const uint16_t bg = state_bg(state);
@@ -255,7 +295,7 @@ static void render_status(ui_status_state_t state, const char *detail)
     draw_text_centered(28, UI_TITLE_SCALE, fg, state_title(state));
     draw_text_centered(110, UI_BODY_SCALE, fg, state_subtitle(state));
     if (detail != NULL && detail[0] != '\0') {
-        draw_text_centered(170, UI_BODY_SCALE, fg, detail);
+        draw_text_block_centered(160, UI_BODY_SCALE, fg, detail);
     }
 }
 
