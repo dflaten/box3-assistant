@@ -6,6 +6,7 @@ The device is planned to be a single firmware image that boots directly on the B
 
 - local microphone capture and speech command recognition on the BOX-3
 - Philips Hue control over the local network
+- Fargo weather lookup over the network via Open-Meteo
 - future ChatGPT integration for cloud-backed conversational features
 - future Jellyfin integration for media control and possible playback features
 
@@ -26,8 +27,18 @@ The project currently includes:
 - speech model loading and local command detection
 - Wi-Fi configuration hooks
 - Hue bridge control path
+- Open-Meteo weather command for Fargo, ND
+- on-device weather display with multiline forecast details
 
-Planned future work includes broader assistant features, richer UI, ChatGPT-backed interactions, and Jellyfin/media support.
+Planned future work includes local spoken weather playback, broader assistant features, richer UI, ChatGPT-backed interactions, and Jellyfin/media support.
+
+## Design Docs
+
+Current design notes in `docs/`:
+
+- [Ask GPT Design](/home/david/projects/esp-projects/box3-assistant/docs/ask-gpt-design.md)
+- [Jellyfin Option 1 Design](/home/david/projects/esp-projects/box3-assistant/docs/jellyfin-option-1-design.md)
+- [Local Weather TTS Design With Piper](/home/david/projects/esp-projects/box3-assistant/docs/weather-tts-piper-design.md)
 
 ## Secrets
 
@@ -146,15 +157,17 @@ The current assistant interaction flow is:
 1. wait in standby for the wake word
 2. wake up and listen for one command
 3. execute the command
-4. return to standby
+4. show the result on screen
+5. return to standby
 
 Current wake word:
 
 - `Hi ESP`
 
-Current always-available voice command:
+Current always-available voice commands:
 
 - `update groups from hue`
+- `weather today`
 
 On boot, the firmware now automatically attempts a Hue group refresh after Wi-Fi connects so a newly flashed device can rebuild its group command list without requiring a manual sync. The `update groups from hue` command is still available to force a refresh later.
 
@@ -167,10 +180,42 @@ After a successful sync, the firmware supports commands like:
 - `turn on kitchen`
 - `turn off office`
 
+Saying `weather today` causes the firmware to:
+
+1. fetch current-day Fargo weather from Open-Meteo over HTTPS
+2. display a multiline weather summary on the BOX-3 screen
+3. hold that weather screen for 15 seconds
+4. return to standby
+
+The current weather display format is:
+
+- current condition and current temperature
+- today's high and low
+- wind speed
+- precipitation chance
+
 Current limits:
 
 - only the first 6 usable Hue groups are added as direct voice commands
 - group names are normalized into simple spoken forms before they become commands
 - synced groups persist across power cycles, but you may need to resync after reflashing if the `storage` partition is erased or rewritten
+- weather is currently fixed to Fargo, ND
+- weather playback is screen-only for now; spoken playback is planned separately
+
+## Weather Configuration
+
+The weather command currently uses a fixed Fargo, ND target in firmware.
+
+Config values available through `menuconfig`:
+
+- `CONFIG_WEATHER_BASE_URL`
+- `CONFIG_WEATHER_TIMEOUT_MS`
+
+Defaults:
+
+- base URL: `https://api.open-meteo.com`
+- timeout: `8000` ms
+
+The firmware also enables the ESP certificate bundle in tracked defaults so HTTPS weather requests can validate the remote certificate.
 
 Note: the firmware uses Espressif's built-in `Hi, ESP` WakeNet model (`wn9s_hiesp`) for this wake-word flow. Say `Hi ESP` when testing the current firmware.
