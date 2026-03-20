@@ -38,6 +38,9 @@
 #define COMMAND_MIN_LISTEN_MS 3000
 #define MAX_SYNCED_GROUPS HUE_GROUP_MAX_COUNT
 #define WEATHER_STATUS_HOLD_MS 15000
+#define MAX_FETCH_FAILURES 50
+#define ASSISTANT_SESSION_TIMEOUT_MS 30000
+#define ASSISTANT_WATCHDOG_POLL_MS 1000
 
 static const char *TAG = "hue-voice";
 static const char *WAKE_WORD = "Hi ESP";
@@ -47,6 +50,7 @@ static const TickType_t WEATHER_STATUS_HOLD_TIME = pdMS_TO_TICKS(WEATHER_STATUS_
 static bool s_assistant_awake;
 static bool s_commands_allocated;
 static volatile bool s_pause_audio_feed;
+static TickType_t s_assistant_awake_tick;
 
 static esp_mn_iface_t *s_multinet = NULL;
 static model_iface_data_t *s_model_data = NULL;
@@ -56,6 +60,8 @@ static esp_codec_dev_handle_t s_mic_codec = NULL;
 
 static hue_group_t s_groups[MAX_SYNCED_GROUPS];
 static size_t s_group_count;
+
+static void audio_feed_set_paused(bool paused);
 
 static int group_command_id(size_t index, bool on)
 {
@@ -106,13 +112,39 @@ static const char *friendly_command_text(int command_id)
 static void return_to_standby(void)
 {
     s_assistant_awake = false;
+    s_assistant_awake_tick = 0;
+    audio_feed_set_paused(true);
     if (s_multinet != NULL && s_model_data != NULL) {
         s_multinet->clean(s_model_data);
     }
     if (s_afe_handle != NULL && s_afe_data != NULL) {
+        s_afe_handle->reset_buffer(s_afe_data);
         s_afe_handle->enable_wakenet(s_afe_data);
     }
+    audio_feed_set_paused(false);
     ESP_LOGI(TAG, "Assistant returned to standby");
+}
+
+static void assistant_watchdog_task(void *arg)
+{
+    while (true) {
+        vTaskDelay(pdMS_TO_TICKS(ASSISTANT_WATCHDOG_POLL_MS));
+
+        if (!s_assistant_awake || s_assistant_awake_tick == 0) {
+            continue;
+        }
+
+        TickType_t elapsed_ms = pdTICKS_TO_MS(xTaskGetTickCount() - s_assistant_awake_tick);
+        if (elapsed_ms < ASSISTANT_SESSION_TIMEOUT_MS) {
+            continue;
+        }
+
+        ESP_LOGW(TAG, "Assistant session exceeded %d ms; forcing standby recovery", ASSISTANT_SESSION_TIMEOUT_MS);
+        ui_status_set(UI_STATUS_ERROR, "Assistant reset");
+        vTaskDelay(STATUS_HOLD_TIME);
+        return_to_standby();
+        ui_status_set(UI_STATUS_READY, NULL);
+    }
 }
 
 static esp_err_t add_runtime_phrase(int command_id, const char *text)
@@ -300,19 +332,33 @@ static void audio_feed_task(void *arg)
 static void speech_detect_task(void *arg)
 {
     TickType_t wake_tick = 0;
+    int fetch_failures = 0;
 
     ESP_LOGI(TAG, "Starting speech detect task");
 
     while (true) {
         afe_fetch_result_t *afe_result = s_afe_handle->fetch(s_afe_data);
         if (afe_result == NULL || afe_result->data == NULL) {
+            if (s_assistant_awake) {
+                fetch_failures++;
+                if (fetch_failures >= MAX_FETCH_FAILURES) {
+                    ESP_LOGW(TAG, "AFE fetch stalled while listening; forcing standby recovery");
+                    ui_status_set(UI_STATUS_ERROR, "Audio timeout");
+                    vTaskDelay(STATUS_HOLD_TIME);
+                    return_to_standby();
+                    ui_status_set(UI_STATUS_READY, NULL);
+                    fetch_failures = 0;
+                }
+            }
             continue;
         }
+        fetch_failures = 0;
 
         if (!s_assistant_awake) {
             if (afe_result->wakeup_state == WAKENET_DETECTED) {
                 s_assistant_awake = true;
                 wake_tick = xTaskGetTickCount();
+                s_assistant_awake_tick = wake_tick;
                 s_multinet->clean(s_model_data);
                 s_afe_handle->disable_wakenet(s_afe_data);
                 ESP_LOGI(TAG, "Wake word detected: %s", WAKE_WORD);
@@ -322,6 +368,15 @@ static void speech_detect_task(void *arg)
         }
 
         TickType_t elapsed_ms = pdTICKS_TO_MS(xTaskGetTickCount() - wake_tick);
+        if (elapsed_ms >= COMMAND_WINDOW_MS) {
+            ESP_LOGW(TAG, "Forcing standby after %lu ms without a final command state", (unsigned long)elapsed_ms);
+            ui_status_set(UI_STATUS_ERROR, "Command timeout");
+            vTaskDelay(STATUS_HOLD_TIME);
+            return_to_standby();
+            ui_status_set(UI_STATUS_READY, NULL);
+            continue;
+        }
+
         esp_mn_state_t mn_state = s_multinet->detect(s_model_data, afe_result->data);
         if (mn_state == ESP_MN_STATE_DETECTING) {
             continue;
@@ -348,6 +403,11 @@ static void speech_detect_task(void *arg)
 
         esp_mn_results_t *mn_result = s_multinet->get_results(s_model_data);
         if (mn_result == NULL || mn_result->num <= 0) {
+            ESP_LOGW(TAG, "MultiNet reported detection without results; forcing standby recovery");
+            ui_status_set(UI_STATUS_ERROR, "Command decode failed");
+            vTaskDelay(STATUS_HOLD_TIME);
+            return_to_standby();
+            ui_status_set(UI_STATUS_READY, NULL);
             continue;
         }
 
@@ -360,6 +420,7 @@ static void speech_detect_task(void *arg)
                  command_prob,
                  (unsigned long)elapsed_ms);
 
+        audio_feed_set_paused(true);
         ui_status_set(UI_STATUS_WORKING, command_text);
 
         esp_err_t action_err = ESP_FAIL;
@@ -369,9 +430,7 @@ static void speech_detect_task(void *arg)
             action_err = sync_groups_from_hue();
         } else if (command_id == CMD_WEATHER_TODAY) {
             weather_report_t report = { 0 };
-            audio_feed_set_paused(true);
             action_err = weather_client_fetch_today(&report);
-            audio_feed_set_paused(false);
             if (action_err == ESP_OK) {
                 weather_client_format_detail(&report, action_detail, sizeof(action_detail));
                 hold_time = WEATHER_STATUS_HOLD_TIME;
@@ -432,4 +491,5 @@ void app_main(void)
 
     xTaskCreatePinnedToCore(audio_feed_task, "audio_feed", 8192, NULL, 6, NULL, 0);
     xTaskCreatePinnedToCore(speech_detect_task, "speech_detect", 12288, NULL, 5, NULL, 1);
+    xTaskCreate(assistant_watchdog_task, "assistant_watchdog", 4096, NULL, 4, NULL);
 }
