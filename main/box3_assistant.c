@@ -65,11 +65,26 @@ static size_t s_group_count;
 
 static void audio_feed_set_paused(bool paused);
 
+/**
+ * @brief Convert a synced Hue group entry into a runtime command ID.
+ * @param index The zero-based Hue group index in the synced group array.
+ * @param on True for the "turn on" variant, false for the "turn off" variant.
+ * @return The runtime command ID associated with the requested group action.
+ * @note Hue group command IDs are allocated in pairs starting at CMD_GROUP_BASE.
+ */
 static int group_command_id(size_t index, bool on)
 {
     return CMD_GROUP_BASE + (int)(index * 2) + (on ? 0 : 1);
 }
 
+/**
+ * @brief Decode a runtime Hue command ID back into a group index and power state.
+ * @param command_id The runtime command ID reported by MultiNet.
+ * @param group_index Optional output for the decoded group index.
+ * @param on Optional output for the decoded target power state.
+ * @return True if the command ID maps to a valid synced Hue group action, otherwise false.
+ * @note This only recognizes command IDs in the dynamic Hue range beginning at CMD_GROUP_BASE.
+ */
 static bool decode_group_command_id(int command_id, size_t *group_index, bool *on)
 {
     if (command_id < CMD_GROUP_BASE) {
@@ -91,6 +106,12 @@ static bool decode_group_command_id(int command_id, size_t *group_index, bool *o
     return true;
 }
 
+/**
+ * @brief Generate a user-facing label for a recognized command.
+ * @param command_id The runtime command ID to describe.
+ * @return A pointer to static text describing the command.
+ * @note Hue group descriptions reuse a static buffer and are not thread-safe.
+ */
 static const char *friendly_command_text(int command_id)
 {
     static char text[96];
@@ -114,6 +135,11 @@ static const char *friendly_command_text(int command_id)
     return "Unknown command";
 }
 
+/**
+ * @brief Reset the assistant back to standby mode.
+ * @return This function does not return a value.
+ * @note This clears the active recognition state, resets the AFE buffer, and re-enables WakeNet.
+ */
 static void return_to_standby(void)
 {
     s_assistant_awake = false;
@@ -130,6 +156,12 @@ static void return_to_standby(void)
     ESP_LOGI(TAG, "Assistant returned to standby");
 }
 
+/**
+ * @brief Watch for assistant sessions that stay awake too long and force recovery.
+ * @param arg Unused FreeRTOS task parameter.
+ * @return This task does not return.
+ * @note The watchdog exists to recover from stuck listening, working, or completed states.
+ */
 static void assistant_watchdog_task(void *arg)
 {
     while (true) {
@@ -152,6 +184,13 @@ static void assistant_watchdog_task(void *arg)
     }
 }
 
+/**
+ * @brief Add a spoken phrase to the runtime MultiNet command table.
+ * @param command_id The command ID to associate with the phrase.
+ * @param text The phrase text to convert into phonemes and register.
+ * @return ESP_OK on success, or an ESP error code on failure.
+ * @note The generated phoneme buffer is freed before this function returns.
+ */
 static esp_err_t add_runtime_phrase(int command_id, const char *text)
 {
     char *phonemes = flite_g2p(text, 1);
@@ -164,6 +203,11 @@ static esp_err_t add_runtime_phrase(int command_id, const char *text)
     return err;
 }
 
+/**
+ * @brief Rebuild the active speech command table from built-in and synced commands.
+ * @return ESP_OK on success, or an ESP error code if command allocation or update fails.
+ * @note This refreshes the MultiNet table after Hue syncs so spoken group commands stay current.
+ */
 static esp_err_t rebuild_command_table(void)
 {
     if (!s_commands_allocated) {
@@ -203,6 +247,11 @@ static esp_err_t rebuild_command_table(void)
     return ESP_OK;
 }
 
+/**
+ * @brief Load previously synced Hue groups from flash storage.
+ * @return ESP_OK on success, or an ESP error code if storage loading fails.
+ * @note The loaded groups become the basis for rebuilding dynamic speech commands.
+ */
 static esp_err_t load_groups_from_storage(void)
 {
     size_t count = 0;
@@ -211,6 +260,11 @@ static esp_err_t load_groups_from_storage(void)
     return ESP_OK;
 }
 
+/**
+ * @brief Fetch Hue groups from the bridge, save them, and rebuild speech commands.
+ * @return ESP_OK on success, or an ESP error code if sync, save, or rebuild fails.
+ * @note Successful syncs replace the in-memory group table and persist it to flash.
+ */
 static esp_err_t sync_groups_from_hue(void)
 {
     size_t synced_count = 0;
@@ -226,6 +280,11 @@ static esp_err_t sync_groups_from_hue(void)
     return ESP_OK;
 }
 
+/**
+ * @brief Initialize the speech models and audio front end used by the assistant.
+ * @return ESP_OK on success, or an ESP error code if models or AFE setup fail.
+ * @note This selects the enabled WakeNet and MultiNet models from the ESP-SR model partition.
+ */
 static esp_err_t init_models(void)
 {
     srmodel_list_t *models = esp_srmodel_init("model");
@@ -293,11 +352,23 @@ static esp_err_t init_models(void)
     return rebuild_command_table();
 }
 
+/**
+ * @brief Pause or resume microphone feeding into the speech front end.
+ * @param paused True to stop feeding audio, false to resume feeding audio.
+ * @return This function does not return a value.
+ * @note Audio is paused during command execution so the AFE ring buffer does not overflow.
+ */
 static void audio_feed_set_paused(bool paused)
 {
     s_pause_audio_feed = paused;
 }
 
+/**
+ * @brief Continuously read microphone audio and feed it into the AFE pipeline.
+ * @param arg Unused FreeRTOS task parameter.
+ * @return This task does not return.
+ * @note Feed failures are logged and retried without terminating the task.
+ */
 static void audio_feed_task(void *arg)
 {
     const int feed_chunks = s_afe_handle->get_feed_chunksize(s_afe_data);
@@ -335,6 +406,12 @@ static void audio_feed_task(void *arg)
     }
 }
 
+/**
+ * @brief Run the wake/listen state machine and dispatch recognized commands.
+ * @param arg Unused FreeRTOS task parameter.
+ * @return This task does not return.
+ * @note This task handles wake word detection, command timeout recovery, and command execution.
+ */
 static void speech_detect_task(void *arg)
 {
     TickType_t wake_tick = 0;
@@ -485,6 +562,11 @@ static void speech_detect_task(void *arg)
     }
 }
 
+/**
+ * @brief Initialize the firmware subsystems and start the assistant tasks.
+ * @return This function does not return a value.
+ * @note Boot-time failures use ESP_ERROR_CHECK and will abort startup rather than continue in a broken state.
+ */
 void app_main(void)
 {
     esp_err_t err = nvs_flash_init();
