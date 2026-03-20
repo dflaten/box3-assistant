@@ -130,14 +130,30 @@ static esp_err_t json_get_number(const cJSON *object, const char *key, double *o
     return ESP_OK;
 }
 
-static esp_err_t json_get_first_array_number(const cJSON *object, const char *key, double *out_value)
+static esp_err_t json_get_array_string_at(const cJSON *object, const char *key, int index, char *buffer, size_t buffer_size)
+{
+    const cJSON *array = cJSON_GetObjectItemCaseSensitive(object, key);
+    if (!cJSON_IsArray(array) || buffer == NULL || buffer_size == 0) {
+        return ESP_FAIL;
+    }
+
+    const cJSON *item = cJSON_GetArrayItem(array, index);
+    if (!cJSON_IsString(item) || item->valuestring == NULL) {
+        return ESP_FAIL;
+    }
+
+    snprintf(buffer, buffer_size, "%s", item->valuestring);
+    return ESP_OK;
+}
+
+static esp_err_t json_get_array_number_at(const cJSON *object, const char *key, int index, double *out_value)
 {
     const cJSON *array = cJSON_GetObjectItemCaseSensitive(object, key);
     if (!cJSON_IsArray(array)) {
         return ESP_FAIL;
     }
 
-    const cJSON *item = cJSON_GetArrayItem(array, 0);
+    const cJSON *item = cJSON_GetArrayItem(array, index);
     if (!cJSON_IsNumber(item)) {
         return ESP_FAIL;
     }
@@ -146,7 +162,7 @@ static esp_err_t json_get_first_array_number(const cJSON *object, const char *ke
     return ESP_OK;
 }
 
-esp_err_t weather_client_fetch_today(weather_report_t *out_report)
+static esp_err_t weather_client_fetch_forecast(weather_forecast_day_t day, weather_report_t *out_report)
 {
     if (out_report == NULL) {
         return ESP_ERR_INVALID_ARG;
@@ -157,7 +173,7 @@ esp_err_t weather_client_fetch_today(weather_report_t *out_report)
     char url[512];
     snprintf(url,
              sizeof(url),
-             "%s/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,weather_code,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=America%%2FChicago&forecast_days=1",
+             "%s/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,weather_code,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=America%%2FChicago&forecast_days=2",
              CONFIG_WEATHER_BASE_URL,
              FARGO_LATITUDE,
              FARGO_LONGITUDE);
@@ -222,22 +238,30 @@ esp_err_t weather_client_fetch_today(weather_report_t *out_report)
     double max_temp = 0;
     double min_temp = 0;
     double precip_probability = 0;
+    double daily_weather_code = 0;
+    const int day_index = (day == WEATHER_FORECAST_TOMORROW) ? 1 : 0;
 
-    err = json_get_number(current, "temperature_2m", &current_temp);
-    if (err == ESP_OK) {
+    err = json_get_array_string_at(daily, "time", day_index, out_report->date, sizeof(out_report->date));
+    if (err == ESP_OK && day == WEATHER_FORECAST_TODAY) {
+        err = json_get_number(current, "temperature_2m", &current_temp);
+    }
+    if (err == ESP_OK && day == WEATHER_FORECAST_TODAY) {
         err = json_get_number(current, "weather_code", &current_weather_code);
     }
-    if (err == ESP_OK) {
+    if (err == ESP_OK && day == WEATHER_FORECAST_TODAY) {
         err = json_get_number(current, "wind_speed_10m", &current_wind_speed);
     }
     if (err == ESP_OK) {
-        err = json_get_first_array_number(daily, "temperature_2m_max", &max_temp);
+        err = json_get_array_number_at(daily, "temperature_2m_max", day_index, &max_temp);
     }
     if (err == ESP_OK) {
-        err = json_get_first_array_number(daily, "temperature_2m_min", &min_temp);
+        err = json_get_array_number_at(daily, "temperature_2m_min", day_index, &min_temp);
     }
     if (err == ESP_OK) {
-        err = json_get_first_array_number(daily, "precipitation_probability_max", &precip_probability);
+        err = json_get_array_number_at(daily, "precipitation_probability_max", day_index, &precip_probability);
+    }
+    if (err == ESP_OK) {
+        err = json_get_array_number_at(daily, "weather_code", day_index, &daily_weather_code);
     }
 
     if (err != ESP_OK) {
@@ -247,6 +271,7 @@ esp_err_t weather_client_fetch_today(weather_report_t *out_report)
         return err;
     }
 
+    out_report->has_current_conditions = day == WEATHER_FORECAST_TODAY;
     out_report->current_temp_f = (int)(current_temp >= 0 ? current_temp + 0.5 : current_temp - 0.5);
     out_report->max_temp_f = (int)(max_temp >= 0 ? max_temp + 0.5 : max_temp - 0.5);
     out_report->min_temp_f = (int)(min_temp >= 0 ? min_temp + 0.5 : min_temp - 0.5);
@@ -255,10 +280,12 @@ esp_err_t weather_client_fetch_today(weather_report_t *out_report)
     snprintf(out_report->summary,
              sizeof(out_report->summary),
              "%s",
-             weather_code_summary((int)(current_weather_code + 0.5)));
+             weather_code_summary((int)((day == WEATHER_FORECAST_TODAY ? current_weather_code : daily_weather_code) + 0.5)));
 
     ESP_LOGI(TAG,
-             "Fargo weather: now=%dF high=%dF low=%dF precip=%d%% wind=%dmph summary=%s",
+             "Fargo weather day=%d date=%s now=%dF high=%dF low=%dF precip=%d%% wind=%dmph summary=%s",
+             day_index,
+             out_report->date,
              out_report->current_temp_f,
              out_report->max_temp_f,
              out_report->min_temp_f,
@@ -271,34 +298,12 @@ esp_err_t weather_client_fetch_today(weather_report_t *out_report)
     return ESP_OK;
 }
 
-void weather_client_format_brief(const weather_report_t *report, char *buffer, size_t buffer_size)
+esp_err_t weather_client_fetch_today(weather_report_t *out_report)
 {
-    if (report == NULL || buffer == NULL || buffer_size == 0) {
-        return;
-    }
-
-    snprintf(buffer,
-             buffer_size,
-             "%dF %d/%d %s",
-             report->current_temp_f,
-             report->max_temp_f,
-             report->min_temp_f,
-             report->summary);
+    return weather_client_fetch_forecast(WEATHER_FORECAST_TODAY, out_report);
 }
 
-void weather_client_format_detail(const weather_report_t *report, char *buffer, size_t buffer_size)
+esp_err_t weather_client_fetch_tomorrow(weather_report_t *out_report)
 {
-    if (report == NULL || buffer == NULL || buffer_size == 0) {
-        return;
-    }
-
-    snprintf(buffer,
-             buffer_size,
-             "NOW %dF %s\nHI %dF LO %dF\nWIND %d MPH\nRAIN %d%%",
-             report->current_temp_f,
-             report->summary,
-             report->max_temp_f,
-             report->min_temp_f,
-             report->wind_speed_mph,
-             report->max_precip_probability);
+    return weather_client_fetch_forecast(WEATHER_FORECAST_TOMORROW, out_report);
 }

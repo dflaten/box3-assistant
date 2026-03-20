@@ -126,7 +126,7 @@ static const char *state_title(ui_status_state_t state)
     case UI_STATUS_WORKING:
         return "WORKING";
     case UI_STATUS_SUCCESS:
-        return "DONE";
+        return "";
     case UI_STATUS_ERROR:
     default:
         return "ATTENTION";
@@ -145,9 +145,9 @@ static const char *state_subtitle(ui_status_state_t state)
     case UI_STATUS_LISTENING:
         return "SAY A COMMAND";
     case UI_STATUS_WORKING:
-        return "UPDATING LIGHTS";
+        return "PROCESSING REQUEST";
     case UI_STATUS_SUCCESS:
-        return "COMMAND COMPLETED";
+        return "";
     case UI_STATUS_ERROR:
     default:
         return "COMMAND NEEDS ATTENTION";
@@ -290,12 +290,19 @@ static void render_status(ui_status_state_t state, const char *detail)
 {
     const uint16_t bg = state_bg(state);
     const uint16_t fg = rgb565(255, 255, 255);
+    const char *title = state_title(state);
+    const char *subtitle = state_subtitle(state);
 
     fill_rect(0, 0, UI_SCREEN_WIDTH, UI_SCREEN_HEIGHT, bg);
-    draw_text_centered(28, UI_TITLE_SCALE, fg, state_title(state));
-    draw_text_centered(110, UI_BODY_SCALE, fg, state_subtitle(state));
+    if (title != NULL && title[0] != '\0') {
+        draw_text_centered(28, UI_TITLE_SCALE, fg, title);
+    }
+    if (subtitle != NULL && subtitle[0] != '\0') {
+        draw_text_centered(110, UI_BODY_SCALE, fg, subtitle);
+    }
     if (detail != NULL && detail[0] != '\0') {
-        draw_text_block_centered(160, UI_BODY_SCALE, fg, detail);
+        const int detail_y = (title != NULL && title[0] == '\0' && subtitle != NULL && subtitle[0] == '\0') ? 72 : 160;
+        draw_text_block_centered(detail_y, UI_BODY_SCALE, fg, detail);
     }
 }
 

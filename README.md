@@ -27,8 +27,9 @@ The project currently includes:
 - speech model loading and local command detection
 - Wi-Fi configuration hooks
 - Hue bridge control path
-- Open-Meteo weather command for Fargo, ND
+- Open-Meteo weather commands for Fargo, ND
 - on-device weather display with multiline forecast details
+- host-side unit tests for assistant state and weather formatting
 
 Planned future work includes local spoken weather playback, broader assistant features, richer UI, ChatGPT-backed interactions, and Jellyfin/media support.
 
@@ -168,6 +169,7 @@ Current always-available voice commands:
 
 - `update groups from hue`
 - `weather today`
+- `weather tomorrow`
 
 On boot, the firmware now automatically attempts a Hue group refresh after Wi-Fi connects so a newly flashed device can rebuild its group command list without requiring a manual sync. The `update groups from hue` command is still available to force a refresh later.
 
@@ -180,19 +182,22 @@ After a successful sync, the firmware supports commands like:
 - `turn on kitchen`
 - `turn off office`
 
-Saying `weather today` causes the firmware to:
+Saying `weather today` or `weather tomorrow` causes the firmware to:
 
-1. fetch current-day Fargo weather from Open-Meteo over HTTPS
+1. fetch the requested Fargo forecast from Open-Meteo over HTTPS
 2. display a multiline weather summary on the BOX-3 screen
 3. hold that weather screen for 15 seconds
 4. return to standby
 
 The current weather display format is:
 
-- current condition and current temperature
-- today's high and low
-- wind speed
+- forecast date
+- current condition and current temperature for `weather today`
+- daily high and low
+- wind speed for `weather today`
 - precipitation chance
+
+The weather result screen does not show the generic `COMMAND COMPLETED` banner. It displays only the weather details for the requested day.
 
 Current limits:
 
@@ -219,3 +224,24 @@ Defaults:
 The firmware also enables the ESP certificate bundle in tracked defaults so HTTPS weather requests can validate the remote certificate.
 
 Note: the firmware uses Espressif's built-in `Hi, ESP` WakeNet model (`wn9s_hiesp`) for this wake-word flow. Say `Hi ESP` when testing the current firmware.
+
+## Tests
+
+Host-side unit tests cover assistant state-machine decisions and weather formatting regressions, including the hang fixes for:
+
+- listening timeout recovery
+- repeated missing AFE fetch recovery
+- empty MultiNet result recovery
+- awake-session watchdog recovery
+
+Run them with:
+
+```bash
+./tests/run_unit_tests.sh
+```
+
+Or from the ESP-IDF build tree:
+
+```bash
+cmake --build build --target unit-tests
+```
