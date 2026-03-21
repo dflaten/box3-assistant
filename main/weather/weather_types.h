@@ -5,6 +5,7 @@
 #define WEATHER_SUMMARY_LEN 24
 #define WEATHER_BRIEF_TEXT_LEN 64
 #define WEATHER_DATE_LEN 16
+#define WEATHER_LOCATION_LEN 48
 #define WEATHER_DETAIL_TEXT_LEN 160
 
 typedef enum {
@@ -14,6 +15,7 @@ typedef enum {
 
 typedef struct {
     char date[WEATHER_DATE_LEN];
+    char location[WEATHER_LOCATION_LEN];
     int current_temp_f;
     int max_temp_f;
     int min_temp_f;

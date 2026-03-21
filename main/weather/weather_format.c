@@ -40,8 +40,8 @@ void weather_format_detail(const weather_report_t *report, char *buffer, size_t 
     if (report->has_current_conditions) {
         snprintf(buffer,
                  buffer_size,
-                 "%s\nNOW %dF %s\nHI %dF LO %dF\nWIND %d MPH\nRAIN %d%%",
-                 report->date,
+                 "Now in %s\n%dF %s\nHI %dF LO %dF\nWIND %d MPH\nRAIN %d%%",
+                 report->location,
                  report->current_temp_f,
                  report->summary,
                  report->max_temp_f,
@@ -53,8 +53,8 @@ void weather_format_detail(const weather_report_t *report, char *buffer, size_t 
 
     snprintf(buffer,
              buffer_size,
-             "%s\n%s\nHI %dF LO %dF\nRAIN %d%%",
-             report->date,
+             "Tomorrow in %s\n%s\nHI %dF LO %dF\nRAIN %d%%",
+             report->location,
              report->summary,
              report->max_temp_f,
              report->min_temp_f,

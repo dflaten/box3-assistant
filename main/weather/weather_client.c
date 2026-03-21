@@ -350,6 +350,7 @@ static esp_err_t weather_client_fetch_forecast(weather_forecast_day_t day, weath
         return err;
     }
 
+    snprintf(out_report->location, sizeof(out_report->location), "%s", CONFIG_WEATHER_LOCATION_NAME);
     out_report->has_current_conditions = day == WEATHER_FORECAST_TODAY;
     out_report->current_temp_f = (int)(current_temp >= 0 ? current_temp + 0.5 : current_temp - 0.5);
     out_report->max_temp_f = (int)(max_temp >= 0 ? max_temp + 0.5 : max_temp - 0.5);

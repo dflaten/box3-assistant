@@ -76,6 +76,7 @@ static bool test_weather_detail_today_includes_date_and_current_conditions(void)
 {
     weather_report_t report = {
         .date = "2026-03-20",
+        .location = "New York City, NY",
         .current_temp_f = 53,
         .max_temp_f = 61,
         .min_temp_f = 27,
@@ -88,8 +89,8 @@ static bool test_weather_detail_today_includes_date_and_current_conditions(void)
 
     weather_format_detail(&report, detail, sizeof(detail));
 
-    ASSERT_TRUE(strstr(detail, "2026-03-20") != NULL);
-    ASSERT_TRUE(strstr(detail, "NOW 53F Cloudy") != NULL);
+    ASSERT_TRUE(strstr(detail, "Now in New York City, NY") != NULL);
+    ASSERT_TRUE(strstr(detail, "53F Cloudy") != NULL);
     ASSERT_TRUE(strstr(detail, "HI 61F LO 27F") != NULL);
     ASSERT_TRUE(strstr(detail, "COMMAND COMPLETED") == NULL);
     return true;
@@ -99,6 +100,7 @@ static bool test_weather_detail_tomorrow_shows_date_without_now_line(void)
 {
     weather_report_t report = {
         .date = "2026-03-21",
+        .location = "New York City, NY",
         .max_temp_f = 49,
         .min_temp_f = 31,
         .max_precip_probability = 40,
@@ -109,9 +111,9 @@ static bool test_weather_detail_tomorrow_shows_date_without_now_line(void)
 
     weather_format_detail(&report, detail, sizeof(detail));
 
-    ASSERT_TRUE(strstr(detail, "2026-03-21") != NULL);
+    ASSERT_TRUE(strstr(detail, "Tomorrow in New York City, NY") != NULL);
     ASSERT_TRUE(strstr(detail, "Rain") != NULL);
-    ASSERT_TRUE(strstr(detail, "NOW ") == NULL);
+    ASSERT_TRUE(strstr(detail, "Now in ") == NULL);
     return true;
 }
 

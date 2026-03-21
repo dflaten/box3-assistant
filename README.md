@@ -191,7 +191,7 @@ Saying `weather today` or `weather tomorrow` causes the firmware to:
 
 The current weather display format is:
 
-- forecast date
+- `Now in <location>` for `weather today`, or `Tomorrow in <location>` for `weather tomorrow`
 - current condition and current temperature for `weather today`
 - daily high and low
 - wind speed for `weather today`
