@@ -2,6 +2,13 @@
 
 #include "weather/weather_format.h"
 
+/**
+ * @brief Format a compact one-line weather summary for logs or short UI text.
+ * @param report The weather report to format.
+ * @param buffer Destination buffer for the formatted text.
+ * @param buffer_size Size of the destination buffer in bytes.
+ * @return This function does not return a value.
+ */
 void weather_format_brief(const weather_report_t *report, char *buffer, size_t buffer_size)
 {
     if (report == NULL || buffer == NULL || buffer_size == 0) {
@@ -17,6 +24,13 @@ void weather_format_brief(const weather_report_t *report, char *buffer, size_t b
              report->summary);
 }
 
+/**
+ * @brief Format a multiline weather summary for the BOX-3 status display.
+ * @param report The weather report to format.
+ * @param buffer Destination buffer for the formatted text.
+ * @param buffer_size Size of the destination buffer in bytes.
+ * @return This function does not return a value.
+ */
 void weather_format_detail(const weather_report_t *report, char *buffer, size_t buffer_size)
 {
     if (report == NULL || buffer == NULL || buffer_size == 0) {

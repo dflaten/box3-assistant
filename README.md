@@ -6,7 +6,7 @@ The device is planned to be a single firmware image that boots directly on the B
 
 - local microphone capture and speech command recognition on the BOX-3
 - Philips Hue control over the local network
-- Fargo weather lookup over the network via Open-Meteo
+- configurable location weather lookup over the network via Open-Meteo
 - future ChatGPT integration for cloud-backed conversational features
 - future Jellyfin integration for media control and possible playback features
 
@@ -27,7 +27,7 @@ The project currently includes:
 - speech model loading and local command detection
 - Wi-Fi configuration hooks
 - Hue bridge control path
-- Open-Meteo weather commands for Fargo, ND
+- Open-Meteo weather commands for a configurable location
 - on-device weather display with multiline forecast details
 - host-side unit tests for assistant state and weather formatting
 
@@ -184,7 +184,7 @@ After a successful sync, the firmware supports commands like:
 
 Saying `weather today` or `weather tomorrow` causes the firmware to:
 
-1. fetch the requested Fargo forecast from Open-Meteo over HTTPS
+1. fetch the requested forecast for the configured location from Open-Meteo over HTTPS
 2. display a multiline weather summary on the BOX-3 screen
 3. hold that weather screen for 15 seconds
 4. return to standby
@@ -204,22 +204,39 @@ Current limits:
 - only the first 6 usable Hue groups are added as direct voice commands
 - group names are normalized into simple spoken forms before they become commands
 - synced groups persist across power cycles, but you may need to resync after reflashing if the `storage` partition is erased or rewritten
-- weather is currently fixed to Fargo, ND
+- weather location is configurable through local sdkconfig values
 - weather playback is screen-only for now; spoken playback is planned separately
 
 ## Weather Configuration
 
-The weather command currently uses a fixed Fargo, ND target in firmware.
+The weather command target is configurable through `menuconfig` or your local `sdkconfig.defaults.local` file.
 
 Config values available through `menuconfig`:
 
 - `CONFIG_WEATHER_BASE_URL`
+- `CONFIG_WEATHER_LOCATION_NAME`
+- `CONFIG_WEATHER_LATITUDE`
+- `CONFIG_WEATHER_LONGITUDE`
+- `CONFIG_WEATHER_TIMEZONE`
 - `CONFIG_WEATHER_TIMEOUT_MS`
 
 Defaults:
 
 - base URL: `https://api.open-meteo.com`
+- location name: `New York City, NY`
+- latitude: `40.7128`
+- longitude: `-74.0060`
+- timezone: `America/New_York`
 - timeout: `8000` ms
+
+For the untracked local-file workflow, add weather settings to `sdkconfig.defaults.local` alongside your Wi-Fi values:
+
+```text
+CONFIG_WEATHER_LOCATION_NAME="New York City, NY"
+CONFIG_WEATHER_LATITUDE="40.7128"
+CONFIG_WEATHER_LONGITUDE="-74.0060"
+CONFIG_WEATHER_TIMEZONE="America/New_York"
+```
 
 The firmware also enables the ESP certificate bundle in tracked defaults so HTTPS weather requests can validate the remote certificate.
 

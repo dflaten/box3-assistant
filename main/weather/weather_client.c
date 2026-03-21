@@ -14,8 +14,6 @@
 #include "weather/weather_client.h"
 
 #define WEATHER_HTTP_TRACE_BODY_SIZE 4096
-#define FARGO_LATITUDE 46.8772
-#define FARGO_LONGITUDE -96.7898
 
 typedef struct {
     char *body;
@@ -25,6 +23,12 @@ typedef struct {
 
 static const char *TAG = "weather";
 
+/**
+ * @brief Collect HTTP response body bytes for weather requests.
+ * @param evt The ESP HTTP client event being handled.
+ * @return ESP_OK after processing the event.
+ * @note Response data is appended into the caller-provided trace buffer.
+ */
 static esp_err_t weather_http_event_handler(esp_http_client_event_t *evt)
 {
     weather_http_trace_t *trace = (weather_http_trace_t *)evt->user_data;
@@ -45,6 +49,11 @@ static esp_err_t weather_http_event_handler(esp_http_client_event_t *evt)
     return ESP_OK;
 }
 
+/**
+ * @brief Allocate and initialize a temporary response trace buffer for weather HTTP calls.
+ * @param trace The trace structure to initialize.
+ * @return ESP_OK on success, or an ESP error code if allocation fails.
+ */
 static esp_err_t weather_http_trace_init(weather_http_trace_t *trace)
 {
     if (trace == NULL) {
@@ -63,6 +72,11 @@ static esp_err_t weather_http_trace_init(weather_http_trace_t *trace)
     return ESP_OK;
 }
 
+/**
+ * @brief Release resources associated with a weather HTTP trace buffer.
+ * @param trace The trace structure to clear and free.
+ * @return This function does not return a value.
+ */
 static void weather_http_trace_deinit(weather_http_trace_t *trace)
 {
     if (trace == NULL) {
@@ -75,6 +89,11 @@ static void weather_http_trace_deinit(weather_http_trace_t *trace)
     trace->len = 0;
 }
 
+/**
+ * @brief Convert an Open-Meteo weather code into a short user-facing summary.
+ * @param code The numeric weather code from the API response.
+ * @return A pointer to static summary text for that code.
+ */
 static const char *weather_code_summary(int code)
 {
     switch (code) {
@@ -119,6 +138,13 @@ static const char *weather_code_summary(int code)
     }
 }
 
+/**
+ * @brief Read a numeric field from a JSON object.
+ * @param object The JSON object containing the field.
+ * @param key The object key to look up.
+ * @param out_value Output for the parsed numeric value.
+ * @return ESP_OK on success, or ESP_FAIL if the field is missing or not numeric.
+ */
 static esp_err_t json_get_number(const cJSON *object, const char *key, double *out_value)
 {
     const cJSON *item = cJSON_GetObjectItemCaseSensitive(object, key);
@@ -130,6 +156,15 @@ static esp_err_t json_get_number(const cJSON *object, const char *key, double *o
     return ESP_OK;
 }
 
+/**
+ * @brief Read a string value at a specific index from a JSON array field.
+ * @param object The JSON object containing the array field.
+ * @param key The object key for the array.
+ * @param index The array index to read.
+ * @param buffer Destination buffer for the copied string.
+ * @param buffer_size Size of the destination buffer in bytes.
+ * @return ESP_OK on success, or ESP_FAIL if the field is missing or invalid.
+ */
 static esp_err_t json_get_array_string_at(const cJSON *object, const char *key, int index, char *buffer, size_t buffer_size)
 {
     const cJSON *array = cJSON_GetObjectItemCaseSensitive(object, key);
@@ -146,6 +181,14 @@ static esp_err_t json_get_array_string_at(const cJSON *object, const char *key, 
     return ESP_OK;
 }
 
+/**
+ * @brief Read a numeric value at a specific index from a JSON array field.
+ * @param object The JSON object containing the array field.
+ * @param key The object key for the array.
+ * @param index The array index to read.
+ * @param out_value Output for the parsed numeric value.
+ * @return ESP_OK on success, or ESP_FAIL if the field is missing or invalid.
+ */
 static esp_err_t json_get_array_number_at(const cJSON *object, const char *key, int index, double *out_value)
 {
     const cJSON *array = cJSON_GetObjectItemCaseSensitive(object, key);
@@ -162,6 +205,36 @@ static esp_err_t json_get_array_number_at(const cJSON *object, const char *key, 
     return ESP_OK;
 }
 
+/**
+ * @brief Parse a configured latitude or longitude string into a numeric value.
+ * @param value The configuration string to parse.
+ * @param label A log-friendly label describing the coordinate type.
+ * @param out_value Output for the parsed coordinate.
+ * @return ESP_OK on success, or an ESP error code if parsing fails.
+ */
+static esp_err_t weather_parse_coordinate(const char *value, const char *label, double *out_value)
+{
+    if (value == NULL || out_value == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    char *end = NULL;
+    double parsed = strtod(value, &end);
+    if (end == value || (end != NULL && *end != '\0')) {
+        ESP_LOGE(TAG, "Invalid weather %s: %s", label, value);
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    *out_value = parsed;
+    return ESP_OK;
+}
+
+/**
+ * @brief Fetch and parse the configured forecast day from Open-Meteo.
+ * @param day The forecast day selector to retrieve.
+ * @param out_report Output for the parsed weather report.
+ * @return ESP_OK on success, or an ESP error code if fetch or parsing fails.
+ */
 static esp_err_t weather_client_fetch_forecast(weather_forecast_day_t day, weather_report_t *out_report)
 {
     if (out_report == NULL) {
@@ -170,13 +243,19 @@ static esp_err_t weather_client_fetch_forecast(weather_forecast_day_t day, weath
 
     *out_report = (weather_report_t){ 0 };
 
+    double latitude = 0;
+    double longitude = 0;
+    ESP_RETURN_ON_ERROR(weather_parse_coordinate(CONFIG_WEATHER_LATITUDE, "latitude", &latitude), TAG, "Invalid weather latitude");
+    ESP_RETURN_ON_ERROR(weather_parse_coordinate(CONFIG_WEATHER_LONGITUDE, "longitude", &longitude), TAG, "Invalid weather longitude");
+
     char url[512];
     snprintf(url,
              sizeof(url),
-             "%s/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,weather_code,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=America%%2FChicago&forecast_days=2",
+             "%s/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,weather_code,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=%s&forecast_days=2",
              CONFIG_WEATHER_BASE_URL,
-             FARGO_LATITUDE,
-             FARGO_LONGITUDE);
+             latitude,
+             longitude,
+             CONFIG_WEATHER_TIMEZONE);
 
     weather_http_trace_t trace = { 0 };
     ESP_RETURN_ON_ERROR(weather_http_trace_init(&trace), TAG, "Failed to allocate weather trace buffer");
@@ -190,7 +269,7 @@ static esp_err_t weather_client_fetch_forecast(weather_forecast_day_t day, weath
         .crt_bundle_attach = esp_crt_bundle_attach,
     };
 
-    ESP_LOGI(TAG, "Fetching Fargo weather from %s", url);
+    ESP_LOGI(TAG, "Fetching weather for %s from %s", CONFIG_WEATHER_LOCATION_NAME, url);
 
     esp_http_client_handle_t client = esp_http_client_init(&config);
     if (client == NULL) {
@@ -283,7 +362,8 @@ static esp_err_t weather_client_fetch_forecast(weather_forecast_day_t day, weath
              weather_code_summary((int)((day == WEATHER_FORECAST_TODAY ? current_weather_code : daily_weather_code) + 0.5)));
 
     ESP_LOGI(TAG,
-             "Fargo weather day=%d date=%s now=%dF high=%dF low=%dF precip=%d%% wind=%dmph summary=%s",
+             "%s weather day=%d date=%s now=%dF high=%dF low=%dF precip=%d%% wind=%dmph summary=%s",
+             CONFIG_WEATHER_LOCATION_NAME,
              day_index,
              out_report->date,
              out_report->current_temp_f,
@@ -298,11 +378,21 @@ static esp_err_t weather_client_fetch_forecast(weather_forecast_day_t day, weath
     return ESP_OK;
 }
 
+/**
+ * @brief Fetch the current-day weather report for the configured location.
+ * @param out_report Output for the parsed weather report.
+ * @return ESP_OK on success, or an ESP error code if fetch or parsing fails.
+ */
 esp_err_t weather_client_fetch_today(weather_report_t *out_report)
 {
     return weather_client_fetch_forecast(WEATHER_FORECAST_TODAY, out_report);
 }
 
+/**
+ * @brief Fetch the next-day weather report for the configured location.
+ * @param out_report Output for the parsed weather report.
+ * @return ESP_OK on success, or an ESP error code if fetch or parsing fails.
+ */
 esp_err_t weather_client_fetch_tomorrow(weather_report_t *out_report)
 {
     return weather_client_fetch_forecast(WEATHER_FORECAST_TOMORROW, out_report);

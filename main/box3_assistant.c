@@ -25,6 +25,7 @@
 
 #include "assistant_state.h"
 #include "board/board_audio.h"
+#include "hue/hue_command_map.h"
 #include "hue/hue_client.h"
 #include "hue/hue_group_store.h"
 #include "board/ui_status.h"
@@ -66,47 +67,6 @@ static size_t s_group_count;
 static void audio_feed_set_paused(bool paused);
 
 /**
- * @brief Convert a synced Hue group entry into a runtime command ID.
- * @param index The zero-based Hue group index in the synced group array.
- * @param on True for the "turn on" variant, false for the "turn off" variant.
- * @return The runtime command ID associated with the requested group action.
- * @note Hue group command IDs are allocated in pairs starting at CMD_GROUP_BASE.
- */
-static int group_command_id(size_t index, bool on)
-{
-    return CMD_GROUP_BASE + (int)(index * 2) + (on ? 0 : 1);
-}
-
-/**
- * @brief Decode a runtime Hue command ID back into a group index and power state.
- * @param command_id The runtime command ID reported by MultiNet.
- * @param group_index Optional output for the decoded group index.
- * @param on Optional output for the decoded target power state.
- * @return True if the command ID maps to a valid synced Hue group action, otherwise false.
- * @note This only recognizes command IDs in the dynamic Hue range beginning at CMD_GROUP_BASE.
- */
-static bool decode_group_command_id(int command_id, size_t *group_index, bool *on)
-{
-    if (command_id < CMD_GROUP_BASE) {
-        return false;
-    }
-
-    int offset = command_id - CMD_GROUP_BASE;
-    size_t index = (size_t)(offset / 2);
-    if (index >= s_group_count) {
-        return false;
-    }
-
-    if (group_index != NULL) {
-        *group_index = index;
-    }
-    if (on != NULL) {
-        *on = (offset % 2) == 0;
-    }
-    return true;
-}
-
-/**
  * @brief Generate a user-facing label for a recognized command.
  * @param command_id The runtime command ID to describe.
  * @return A pointer to static text describing the command.
@@ -127,7 +87,7 @@ static const char *friendly_command_text(int command_id)
 
     size_t index = 0;
     bool on = false;
-    if (decode_group_command_id(command_id, &index, &on)) {
+    if (hue_decode_group_command_id(command_id, CMD_GROUP_BASE, s_group_count, &index, &on)) {
         snprintf(text, sizeof(text), "Turn %s %s", on ? "on" : "off", s_groups[index].name);
         return text;
     }
@@ -227,8 +187,12 @@ static esp_err_t rebuild_command_table(void)
         snprintf(on_phrase, sizeof(on_phrase), "turn on %s", s_groups[i].name);
         snprintf(off_phrase, sizeof(off_phrase), "turn off %s", s_groups[i].name);
 
-        ESP_RETURN_ON_ERROR(add_runtime_phrase(group_command_id(i, true), on_phrase), TAG, "Failed to add on command");
-        ESP_RETURN_ON_ERROR(add_runtime_phrase(group_command_id(i, false), off_phrase), TAG, "Failed to add off command");
+        ESP_RETURN_ON_ERROR(add_runtime_phrase(hue_group_command_id(CMD_GROUP_BASE, i, true), on_phrase),
+                            TAG,
+                            "Failed to add on command");
+        ESP_RETURN_ON_ERROR(add_runtime_phrase(hue_group_command_id(CMD_GROUP_BASE, i, false), off_phrase),
+                            TAG,
+                            "Failed to add off command");
     }
 
     esp_mn_error_t *err = esp_mn_commands_update();
@@ -543,7 +507,7 @@ static void speech_detect_task(void *arg)
         } else {
             size_t group_index = 0;
             bool on = false;
-            if (decode_group_command_id(command_id, &group_index, &on)) {
+            if (hue_decode_group_command_id(command_id, CMD_GROUP_BASE, s_group_count, &group_index, &on)) {
                 action_err = hue_client_set_group_by_id(s_groups[group_index].id, on);
             } else {
                 ESP_LOGW(TAG, "Unhandled command id %d", command_id);

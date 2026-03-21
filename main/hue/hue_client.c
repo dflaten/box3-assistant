@@ -23,6 +23,12 @@ typedef struct {
 
 static const char *TAG = "hue-voice";
 
+/**
+ * @brief Collect HTTP response body bytes for Hue requests.
+ * @param evt The ESP HTTP client event being handled.
+ * @return ESP_OK after processing the event.
+ * @note Response data is appended into the caller-provided trace buffer.
+ */
 static esp_err_t hue_http_event_handler(esp_http_client_event_t *evt)
 {
     hue_http_trace_t *trace = (hue_http_trace_t *)evt->user_data;
@@ -45,6 +51,13 @@ static esp_err_t hue_http_event_handler(esp_http_client_event_t *evt)
     return ESP_OK;
 }
 
+/**
+ * @brief Normalize a Hue group name into a simple spoken command form.
+ * @param src The source Hue group name from the bridge.
+ * @param dst Destination buffer for the normalized name.
+ * @param dst_size Size of the destination buffer in bytes.
+ * @return This function does not return a value.
+ */
 static void normalize_group_name(const char *src, char *dst, size_t dst_size)
 {
     size_t out = 0;
@@ -73,11 +86,21 @@ static void normalize_group_name(const char *src, char *dst, size_t dst_size)
     dst[out] = '\0';
 }
 
+/**
+ * @brief Check whether a normalized Hue group name is suitable for speech commands.
+ * @param name The normalized group name to validate.
+ * @return True if the name is usable for commands, otherwise false.
+ */
 static bool is_group_name_valid(const char *name)
 {
     return name != NULL && strlen(name) >= 3;
 }
 
+/**
+ * @brief Allocate and initialize a temporary response trace buffer for Hue HTTP calls.
+ * @param trace The trace structure to initialize.
+ * @return ESP_OK on success, or an ESP error code if allocation fails.
+ */
 static esp_err_t hue_http_trace_init(hue_http_trace_t *trace)
 {
     if (trace == NULL) {
@@ -96,6 +119,11 @@ static esp_err_t hue_http_trace_init(hue_http_trace_t *trace)
     return ESP_OK;
 }
 
+/**
+ * @brief Release resources associated with a Hue HTTP trace buffer.
+ * @param trace The trace structure to clear and free.
+ * @return This function does not return a value.
+ */
 static void hue_http_trace_deinit(hue_http_trace_t *trace)
 {
     if (trace == NULL) {
@@ -108,6 +136,15 @@ static void hue_http_trace_deinit(hue_http_trace_t *trace)
     trace->len = 0;
 }
 
+/**
+ * @brief Execute a Hue bridge HTTP request and capture its response details.
+ * @param url The full request URL.
+ * @param method The HTTP method to use.
+ * @param body Optional request body for PUT-style updates.
+ * @param trace Optional trace buffer for the response body.
+ * @param out_status Optional output for the HTTP status code.
+ * @return ESP_OK on success, or an ESP error code if the request fails.
+ */
 static esp_err_t hue_http_perform(const char *url,
                                   esp_http_client_method_t method,
                                   const char *body,
@@ -181,6 +218,12 @@ static esp_err_t hue_http_perform(const char *url,
     return err;
 }
 
+/**
+ * @brief Send an on or off action to a specific Hue group ID.
+ * @param group_id The Hue bridge group identifier to control.
+ * @param on True to turn the group on, false to turn it off.
+ * @return ESP_OK on success, or an ESP error code if the request fails.
+ */
 esp_err_t hue_client_set_group_by_id(const char *group_id, bool on)
 {
     if (group_id == NULL || group_id[0] == '\0') {
@@ -208,11 +251,23 @@ esp_err_t hue_client_set_group_by_id(const char *group_id, bool on)
     return err;
 }
 
+/**
+ * @brief Send an on or off action to the configured default Hue group.
+ * @param on True to turn the group on, false to turn it off.
+ * @return ESP_OK on success, or an ESP error code if the request fails.
+ */
 esp_err_t hue_client_set_group(bool on)
 {
     return hue_client_set_group_by_id(CONFIG_HUE_BRIDGE_GROUP_ID, on);
 }
 
+/**
+ * @brief Fetch the raw Hue groups list from the configured bridge.
+ * @param groups Output array for fetched group entries.
+ * @param max_groups Maximum number of entries that fit in the output array.
+ * @param out_count Output for the number of groups written.
+ * @return ESP_OK on success, or an ESP error code if fetch or parsing fails.
+ */
 esp_err_t hue_client_fetch_groups(hue_group_t *groups, size_t max_groups, size_t *out_count)
 {
     if (groups == NULL || out_count == NULL) {
@@ -280,6 +335,14 @@ esp_err_t hue_client_fetch_groups(hue_group_t *groups, size_t max_groups, size_t
     return ESP_OK;
 }
 
+/**
+ * @brief Fetch Hue groups and reduce them to unique spoken-command targets.
+ * @param groups Output array for accepted normalized group entries.
+ * @param max_groups Maximum number of entries that fit in the output array.
+ * @param out_count Output for the number of accepted groups written.
+ * @return ESP_OK on success, or an ESP error code if syncing fails.
+ * @note Names are normalized and duplicates are removed before acceptance.
+ */
 esp_err_t hue_client_sync_groups(hue_group_t *groups, size_t max_groups, size_t *out_count)
 {
     if (groups == NULL || out_count == NULL) {

@@ -86,11 +86,23 @@ static const glyph_t s_font[] = {
     {'Z', {0x1F, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1F}},
 };
 
+/**
+ * @brief Convert 8-bit RGB components into RGB565 panel color format.
+ * @param r Red component in 8-bit space.
+ * @param g Green component in 8-bit space.
+ * @param b Blue component in 8-bit space.
+ * @return The packed RGB565 color value.
+ */
 static uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b)
 {
     return (uint16_t)(((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3));
 }
 
+/**
+ * @brief Pick the background color associated with a UI status state.
+ * @param state The status state to render.
+ * @return The RGB565 background color for that state.
+ */
 static uint16_t state_bg(ui_status_state_t state)
 {
     switch (state) {
@@ -112,6 +124,11 @@ static uint16_t state_bg(ui_status_state_t state)
     }
 }
 
+/**
+ * @brief Get the primary title text shown for a UI status state.
+ * @param state The status state to describe.
+ * @return A pointer to static title text for the state.
+ */
 static const char *state_title(ui_status_state_t state)
 {
     switch (state) {
@@ -133,6 +150,11 @@ static const char *state_title(ui_status_state_t state)
     }
 }
 
+/**
+ * @brief Get the secondary subtitle text shown for a UI status state.
+ * @param state The status state to describe.
+ * @return A pointer to static subtitle text for the state.
+ */
 static const char *state_subtitle(ui_status_state_t state)
 {
     switch (state) {
@@ -154,6 +176,11 @@ static const char *state_subtitle(ui_status_state_t state)
     }
 }
 
+/**
+ * @brief Look up a bitmap glyph definition for a character.
+ * @param c The character to render.
+ * @return A pointer to the matching glyph, or the space glyph if none exists.
+ */
 static const glyph_t *find_glyph(char c)
 {
     for (size_t i = 0; i < sizeof(s_font) / sizeof(s_font[0]); ++i) {
@@ -164,6 +191,11 @@ static const glyph_t *find_glyph(char c)
     return &s_font[0];
 }
 
+/**
+ * @brief Turn the LCD panel and backlight on or off as a single operation.
+ * @param on True to enable the display, false to disable it.
+ * @return ESP_OK on success, or an ESP error code if panel power switching fails.
+ */
 static esp_err_t display_power_set(bool on)
 {
     if (!s_ready || s_display_on == on) {
@@ -186,6 +218,15 @@ static esp_err_t display_power_set(bool on)
     return ESP_OK;
 }
 
+/**
+ * @brief Fill a clipped rectangle on the display with a solid color.
+ * @param x Left edge in pixels.
+ * @param y Top edge in pixels.
+ * @param w Rectangle width in pixels.
+ * @param h Rectangle height in pixels.
+ * @param color RGB565 fill color.
+ * @return This function does not return a value.
+ */
 static void fill_rect(int x, int y, int w, int h, uint16_t color)
 {
     if (x >= UI_SCREEN_WIDTH || y >= UI_SCREEN_HEIGHT || w <= 0 || h <= 0) {
@@ -218,6 +259,13 @@ static void fill_rect(int x, int y, int w, int h, uint16_t color)
     }
 }
 
+/**
+ * @brief Copy text into a buffer while converting it to uppercase.
+ * @param dst Destination buffer for the uppercase result.
+ * @param dst_size Size of the destination buffer in bytes.
+ * @param src Source text to copy and normalize.
+ * @return This function does not return a value.
+ */
 static void uppercase_copy(char *dst, size_t dst_size, const char *src)
 {
     if (dst_size == 0) {
@@ -230,12 +278,26 @@ static void uppercase_copy(char *dst, size_t dst_size, const char *src)
     dst[i] = '\0';
 }
 
+/**
+ * @brief Measure the rendered pixel width of a string at a given scale.
+ * @param text The text to measure.
+ * @param scale Pixel scale factor for the built-in bitmap font.
+ * @return The total width of the rendered string in pixels.
+ */
 static int text_width(const char *text, int scale)
 {
     const int char_width = (5 * scale) + UI_CHAR_SPACING;
     return (int)strlen(text) * char_width - UI_CHAR_SPACING;
 }
 
+/**
+ * @brief Draw a single centered line of text on the status screen.
+ * @param y Top pixel position for the text baseline block.
+ * @param scale Pixel scale factor for the built-in font.
+ * @param color RGB565 text color.
+ * @param text The text to render.
+ * @return This function does not return a value.
+ */
 static void draw_text_centered(int y, int scale, uint16_t color, const char *text)
 {
     char upper[64];
@@ -258,6 +320,14 @@ static void draw_text_centered(int y, int scale, uint16_t color, const char *tex
     }
 }
 
+/**
+ * @brief Draw a centered multi-line text block split on newline characters.
+ * @param start_y Top pixel position for the first rendered line.
+ * @param scale Pixel scale factor for the built-in font.
+ * @param color RGB565 text color.
+ * @param text The multi-line text block to render.
+ * @return This function does not return a value.
+ */
 static void draw_text_block_centered(int start_y, int scale, uint16_t color, const char *text)
 {
     if (text == NULL || text[0] == '\0') {
@@ -286,6 +356,12 @@ static void draw_text_block_centered(int start_y, int scale, uint16_t color, con
     }
 }
 
+/**
+ * @brief Render the full status screen for the requested state and detail text.
+ * @param state The status state to display.
+ * @param detail Optional detail text to show beneath the title and subtitle.
+ * @return This function does not return a value.
+ */
 static void render_status(ui_status_state_t state, const char *detail)
 {
     const uint16_t bg = state_bg(state);
@@ -306,6 +382,12 @@ static void render_status(ui_status_state_t state, const char *detail)
     }
 }
 
+/**
+ * @brief Power down the display after extended idle time in the ready state.
+ * @param arg Unused FreeRTOS task parameter.
+ * @return This task does not return.
+ * @note The display stays awake for non-ready states and any recent activity.
+ */
 static void ui_idle_task(void *arg)
 {
     while (true) {
@@ -325,6 +407,11 @@ static void ui_idle_task(void *arg)
     }
 }
 
+/**
+ * @brief Initialize the BOX-3 display and start the UI idle-management task.
+ * @return ESP_OK on success, or an ESP error code if display startup fails.
+ * @note This also shows the initial booting screen immediately after setup.
+ */
 esp_err_t ui_status_init(void)
 {
     if (s_ready) {
@@ -356,6 +443,11 @@ esp_err_t ui_status_init(void)
     return ESP_OK;
 }
 
+/**
+ * @brief Record user-visible activity so the ready-screen idle timer resets.
+ * @return This function does not return a value.
+ * @note Calls made before UI initialization are ignored.
+ */
 void ui_status_note_activity(void)
 {
     if (!s_ready) {
@@ -364,6 +456,13 @@ void ui_status_note_activity(void)
     s_last_activity_tick = xTaskGetTickCount();
 }
 
+/**
+ * @brief Update the screen to a new UI status state and optional detail text.
+ * @param state The new status state to display.
+ * @param detail Optional detail text shown on the screen.
+ * @return This function does not return a value.
+ * @note This wakes the display if it has been idled off.
+ */
 void ui_status_set(ui_status_state_t state, const char *detail)
 {
     if (!s_ready) {

@@ -4,6 +4,7 @@ idf_component_register(
         "board/ui_status.c"
         "assistant_state.c"
         "box3_assistant.c"
+        "hue/hue_command_map.c"
         "hue/hue_client.c"
         "hue/hue_group_store.c"
         "system/wifi_support.c"

@@ -19,7 +19,15 @@ static const char *TAG = "hue-voice";
 static EventGroupHandle_t s_wifi_event_group;
 static int s_retry_num;
 
-// Keep the STA connection alive after startup so the assistant can recover from AP drops.
+/**
+ * @brief Handle Wi-Fi and IP events for connection startup and reconnects.
+ * @param arg Unused event handler argument.
+ * @param event_base The ESP event family that triggered the callback.
+ * @param event_id The specific event identifier within that family.
+ * @param event_data Event-specific payload from ESP-IDF.
+ * @return This function does not return a value.
+ * @note This keeps the STA connection alive after startup so the assistant can recover from AP drops.
+ */
 static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
 {
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
@@ -46,9 +54,13 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
     }
 }
 
+/**
+ * @brief Initialize station-mode Wi-Fi and block until startup connect succeeds or times out.
+ * @return ESP_OK on success, or an ESP error code if configuration or connection fails.
+ * @note Runtime reconnects after startup are handled by the Wi-Fi event callback.
+ */
 esp_err_t wifi_init_sta(void)
 {
-    // This is a blocking startup connect; runtime reconnects are handled by the event callback above.
     if (strlen(CONFIG_HUE_WIFI_SSID) == 0) {
         ESP_LOGE(TAG, "Wi-Fi SSID is empty. Set CONFIG_HUE_WIFI_SSID in menuconfig or sdkconfig.");
         return ESP_ERR_INVALID_STATE;

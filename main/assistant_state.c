@@ -1,5 +1,12 @@
 #include "assistant_state.h"
 
+/**
+ * @brief Decide how the assistant should react to repeated missing AFE fetch results.
+ * @param assistant_awake True when the assistant is in an active command session.
+ * @param fetch_failures The current count of consecutive missing fetches.
+ * @param max_fetch_failures The threshold that triggers recovery.
+ * @return The next listen-step action for the assistant state machine.
+ */
 assistant_listen_step_t assistant_step_for_missing_fetch(bool assistant_awake, int fetch_failures, int max_fetch_failures)
 {
     if (!assistant_awake) {
@@ -11,6 +18,15 @@ assistant_listen_step_t assistant_step_for_missing_fetch(bool assistant_awake, i
     return ASSISTANT_LISTEN_STEP_CONTINUE;
 }
 
+/**
+ * @brief Decide how the assistant should react to the current MultiNet detection state.
+ * @param elapsed_ms Milliseconds since the current command session started.
+ * @param command_window_ms Maximum allowed listening time before timeout recovery.
+ * @param command_min_listen_ms Minimum listen time before timeout can count as no-command.
+ * @param mn_state The current MultiNet detector state.
+ * @param have_results True when MultiNet produced at least one command result.
+ * @return The next listen-step action for the assistant state machine.
+ */
 assistant_listen_step_t assistant_step_for_multinet(uint32_t elapsed_ms,
                                                     uint32_t command_window_ms,
                                                     uint32_t command_min_listen_ms,
@@ -39,6 +55,14 @@ assistant_listen_step_t assistant_step_for_multinet(uint32_t elapsed_ms,
     return ASSISTANT_LISTEN_STEP_CONTINUE;
 }
 
+/**
+ * @brief Check whether the assistant awake-session watchdog should force recovery.
+ * @param assistant_awake True when the assistant is currently awake.
+ * @param have_awake_tick True when a valid awake timestamp is available.
+ * @param elapsed_ms Milliseconds elapsed since the awake timestamp.
+ * @param session_timeout_ms Maximum allowed awake-session duration.
+ * @return True if the session should be treated as expired, otherwise false.
+ */
 bool assistant_session_watchdog_expired(bool assistant_awake,
                                         bool have_awake_tick,
                                         uint32_t elapsed_ms,

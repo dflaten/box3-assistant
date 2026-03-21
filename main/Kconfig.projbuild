@@ -34,6 +34,22 @@ config WEATHER_BASE_URL
     string "Open-Meteo base URL"
     default "https://api.open-meteo.com"
 
+config WEATHER_LOCATION_NAME
+    string "Weather location name"
+    default "Fargo, ND"
+
+config WEATHER_LATITUDE
+    string "Weather latitude"
+    default "46.8772"
+
+config WEATHER_LONGITUDE
+    string "Weather longitude"
+    default "-96.7898"
+
+config WEATHER_TIMEZONE
+    string "Weather timezone"
+    default "America/Chicago"
+
 config WEATHER_TIMEOUT_MS
     int "Weather request timeout in ms"
     range 1000 30000

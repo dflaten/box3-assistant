@@ -17,6 +17,10 @@ static const char *STORE_PATH = BSP_SPIFFS_MOUNT_POINT "/hue_groups.json";
 
 static bool s_store_ready;
 
+/**
+ * @brief Mount the group storage backend if it is not already ready.
+ * @return ESP_OK on success, or an ESP error code if SPIFFS mount fails.
+ */
 esp_err_t hue_group_store_init(void)
 {
     if (s_store_ready) {
@@ -33,6 +37,13 @@ esp_err_t hue_group_store_init(void)
     return ESP_OK;
 }
 
+/**
+ * @brief Load previously saved Hue groups from flash storage.
+ * @param groups Output array for loaded group entries.
+ * @param max_groups Maximum number of entries that fit in the output array.
+ * @param out_count Output for the number of loaded groups written.
+ * @return ESP_OK on success, or an ESP error code if storage or parsing fails.
+ */
 esp_err_t hue_group_store_load(hue_group_t *groups, size_t max_groups, size_t *out_count)
 {
     if (out_count == NULL) {
@@ -104,6 +115,12 @@ esp_err_t hue_group_store_load(hue_group_t *groups, size_t max_groups, size_t *o
     return ESP_OK;
 }
 
+/**
+ * @brief Persist the current Hue groups list to flash storage.
+ * @param groups The group array to save.
+ * @param count The number of valid entries in the group array.
+ * @return ESP_OK on success, or an ESP error code if serialization or writing fails.
+ */
 esp_err_t hue_group_store_save(const hue_group_t *groups, size_t count)
 {
     ESP_RETURN_ON_ERROR(hue_group_store_init(), TAG, "Failed to initialize group storage");
