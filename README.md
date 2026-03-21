@@ -2,21 +2,7 @@
 
 `box3-assistant` is an ESP32-S3-BOX-3 firmware project for a networked voice assistant terminal.
 
-The device is planned to be a single firmware image that boots directly on the BOX-3 and acts as a smart front end for home and media integrations. The current direction is:
-
-- local microphone capture and speech command recognition on the BOX-3
-- Philips Hue control over the local network
-- configurable location weather lookup over the network via Open-Meteo
-- future ChatGPT integration for cloud-backed conversational features
-- future Jellyfin integration for media control and possible playback features
-
-The intended architecture is a thin but capable assistant device:
-
-- low-latency audio capture, command spotting, and board control happen locally
-- cloud or LAN services handle heavier tasks such as LLM responses, home APIs, and media services
-- the BOX-3 provides the microphone, speaker, touchscreen, and embedded control surface
-
-This keeps the project realistic for ESP32-S3 hardware while still allowing one device to coordinate voice commands, smart-home actions, AI requests, and media integrations.
+This firmware image boots directly on the BOX-3 and acts as a smart front end for home and media integrations. 
 
 ## Status
 
@@ -41,9 +27,74 @@ Current design notes in `docs/`:
 - Jellyfin Option 1 Design
 - Local Weather TTS Design With Piper
 
+## Wake Word And Commands
+
+The expected boot flow after flashing is:
+
+1. boot the firmware
+2. connect to Wi-Fi
+3. load the speech models
+4. automatically refresh Hue groups once from the bridge
+5. fall back to the last saved group list if the Hue refresh fails
+6. enter standby and wait for the wake word
+
+The current assistant interaction flow is:
+
+1. wait in standby for the wake word
+2. wake up and listen for one command
+3. execute the command
+4. show the result on screen
+5. return to standby
+
+Current wake word:
+
+- `Hi ESP`
+
+Current always-available voice commands:
+
+- `update groups from hue`
+- `weather today`
+- `weather tomorrow`
+
+On boot, the firmware now automatically attempts a Hue group refresh after Wi-Fi connects so a newly flashed device can rebuild its group command list without requiring a manual sync. The `update groups from hue` command is still available to force a refresh later.
+
+After a successful sync, the firmware fetches the Hue groups list from the bridge, normalizes the spoken names, saves the accepted groups to the `storage` partition, and rebuilds the active MultiNet command table.
+
+After a successful sync, the firmware supports commands like:
+
+- `turn on living room`
+- `turn off living room`
+- `turn on kitchen`
+- `turn off office`
+
+Saying `weather today` or `weather tomorrow` causes the firmware to:
+
+1. fetch the requested forecast for the configured location from Open-Meteo over HTTPS
+2. display a multiline weather summary on the BOX-3 screen
+3. hold that weather screen for 15 seconds
+4. return to standby
+
+The current weather display format is:
+
+- `Now in <location>` for `weather today`, or `Tomorrow in <location>` for `weather tomorrow`
+- current condition and current temperature for `weather today`
+- daily high and low
+- wind speed for `weather today`
+- precipitation chance
+
+The weather result screen does not show the generic `COMMAND COMPLETED` banner. It displays only the weather details for the requested day.
+
+Current limits:
+
+- only the first 6 usable Hue groups are added as direct voice commands
+- group names are normalized into simple spoken forms before they become commands
+- synced groups persist across power cycles, but you may need to resync after reflashing if the `storage` partition is erased or rewritten
+- weather location is configurable through local sdkconfig values
+- weather playback is screen-only for now; spoken playback is planned separately
+
 ## Secrets
 
-Do not commit real Wi-Fi passwords, Hue API keys, or other credentials into tracked files.
+To avoid committing real Wi-Fi passwords, Hue API keys, or other credentials these are stored in the config.
 
 Recommended options:
 
@@ -142,70 +193,6 @@ idf.py -p /dev/ttyACM0 flash monitor
 
 The `set -x SDKCONFIG_DEFAULTS ...` command only applies to the current shell session. The credentials stored in `sdkconfig.defaults.local` remain on disk, but you need to set the environment variable again in each new terminal. If `grep` still shows empty strings, the build is not using your local defaults file yet.
 
-## Wake Word And Commands
-
-The expected boot flow after flashing is:
-
-1. boot the firmware
-2. connect to Wi-Fi
-3. load the speech models
-4. automatically refresh Hue groups once from the bridge
-5. fall back to the last saved group list if the Hue refresh fails
-6. enter standby and wait for the wake word
-
-The current assistant interaction flow is:
-
-1. wait in standby for the wake word
-2. wake up and listen for one command
-3. execute the command
-4. show the result on screen
-5. return to standby
-
-Current wake word:
-
-- `Hi ESP`
-
-Current always-available voice commands:
-
-- `update groups from hue`
-- `weather today`
-- `weather tomorrow`
-
-On boot, the firmware now automatically attempts a Hue group refresh after Wi-Fi connects so a newly flashed device can rebuild its group command list without requiring a manual sync. The `update groups from hue` command is still available to force a refresh later.
-
-After a successful sync, the firmware fetches the Hue groups list from the bridge, normalizes the spoken names, saves the accepted groups to the `storage` partition, and rebuilds the active MultiNet command table.
-
-After a successful sync, the firmware supports commands like:
-
-- `turn on living room`
-- `turn off living room`
-- `turn on kitchen`
-- `turn off office`
-
-Saying `weather today` or `weather tomorrow` causes the firmware to:
-
-1. fetch the requested forecast for the configured location from Open-Meteo over HTTPS
-2. display a multiline weather summary on the BOX-3 screen
-3. hold that weather screen for 15 seconds
-4. return to standby
-
-The current weather display format is:
-
-- `Now in <location>` for `weather today`, or `Tomorrow in <location>` for `weather tomorrow`
-- current condition and current temperature for `weather today`
-- daily high and low
-- wind speed for `weather today`
-- precipitation chance
-
-The weather result screen does not show the generic `COMMAND COMPLETED` banner. It displays only the weather details for the requested day.
-
-Current limits:
-
-- only the first 6 usable Hue groups are added as direct voice commands
-- group names are normalized into simple spoken forms before they become commands
-- synced groups persist across power cycles, but you may need to resync after reflashing if the `storage` partition is erased or rewritten
-- weather location is configurable through local sdkconfig values
-- weather playback is screen-only for now; spoken playback is planned separately
 
 ## Weather Configuration
 
