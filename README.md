@@ -37,9 +37,9 @@ Planned future work includes local spoken weather playback, broader assistant fe
 
 Current design notes in `docs/`:
 
-- [Ask GPT Design](/home/david/projects/esp-projects/box3-assistant/docs/ask-gpt-design.md)
-- [Jellyfin Option 1 Design](/home/david/projects/esp-projects/box3-assistant/docs/jellyfin-option-1-design.md)
-- [Local Weather TTS Design With Piper](/home/david/projects/esp-projects/box3-assistant/docs/weather-tts-piper-design.md)
+- Ask GPT Design
+- Jellyfin Option 1 Design
+- Local Weather TTS Design With Piper
 
 ## Secrets
 
@@ -48,7 +48,7 @@ Do not commit real Wi-Fi passwords, Hue API keys, or other credentials into trac
 Recommended options:
 
 - use `idf.py menuconfig` and keep secrets in `sdkconfig` only
-- or create a local `sdkconfig.defaults.local` file based on [sdkconfig.defaults.local.example](/home/david/projects/esp-projects/box3-assistant/sdkconfig.defaults.local.example)
+- or create a local `sdkconfig.defaults.local` file based on sdkconfig.defaults.local.example
 
 Both `sdkconfig` and `sdkconfig.defaults.local` are ignored by git.
 
@@ -64,7 +64,7 @@ If `sdkconfig` already contains stale values, ESP-IDF will keep using them until
 If you want to build with a local defaults override file in `fish`, run:
 
 ```fish
-cd /home/david/projects/esp-projects/box3-assistant
+cd /home/<user-name>/projects/esp-projects/box3-assistant
 get_idf
 set -x SDKCONFIG_DEFAULTS "sdkconfig.defaults;sdkconfig.defaults.local"
 rm -f sdkconfig sdkconfig.old
@@ -75,7 +75,7 @@ idf.py build
 In `bash`, use `export` instead:
 
 ```bash
-cd /home/david/projects/esp-projects/box3-assistant
+cd /home/<user-name>/projects/esp-projects/box3-assistant
 export SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.local"
 rm -f sdkconfig sdkconfig.old
 idf.py reconfigure
@@ -85,7 +85,7 @@ idf.py build
 For flashing with the same local override in `fish`:
 
 ```fish
-cd /home/david/projects/esp-projects/box3-assistant
+cd /home/<user-name>/projects/esp-projects/box3-assistant
 get_idf
 set -x SDKCONFIG_DEFAULTS "sdkconfig.defaults;sdkconfig.defaults.local"
 rm -f sdkconfig sdkconfig.old
@@ -103,7 +103,7 @@ You can set Wi-Fi credentials in either of these ways:
 For the local file workflow:
 
 ```fish
-cd /home/david/projects/esp-projects/box3-assistant
+cd /home/<user-name>/projects/esp-projects/box3-assistant
 cp sdkconfig.defaults.local.example sdkconfig.defaults.local
 ```
 
@@ -117,7 +117,7 @@ CONFIG_HUE_WIFI_PASSWORD="your-password"
 When building or flashing from a fresh shell, include the local defaults file and regenerate `sdkconfig` if needed:
 
 ```fish
-cd /home/david/projects/esp-projects/box3-assistant
+cd /home/<user-name>/projects/esp-projects/box3-assistant
 get_idf
 set -x SDKCONFIG_DEFAULTS "sdkconfig.defaults;sdkconfig.defaults.local"
 rm -f sdkconfig sdkconfig.old
@@ -130,7 +130,7 @@ idf.py build
 Or to flash and monitor:
 
 ```fish
-cd /home/david/projects/esp-projects/box3-assistant
+cd /home/<user-name>/projects/esp-projects/box3-assistant
 get_idf
 set -x SDKCONFIG_DEFAULTS "sdkconfig.defaults;sdkconfig.defaults.local"
 rm -f sdkconfig sdkconfig.old
