@@ -3,7 +3,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -21,7 +20,6 @@
 #include "esp_wn_models.h"
 #include "esp_codec_dev.h"
 #include "flite_g2p.h"
-#include "model_path.h"
 
 #include "assistant_state.h"
 #include "board/board_audio.h"
@@ -132,7 +130,10 @@ static void assistant_watchdog_task(void *arg)
         }
 
         TickType_t elapsed_ms = pdTICKS_TO_MS(xTaskGetTickCount() - s_assistant_awake_tick);
-        if (elapsed_ms < ASSISTANT_SESSION_TIMEOUT_MS) {
+        if (!assistant_session_timed_out(s_assistant_awake,
+                                         s_assistant_awake_tick != 0,
+                                         elapsed_ms,
+                                         ASSISTANT_SESSION_TIMEOUT_MS)) {
             continue;
         }
 

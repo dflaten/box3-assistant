@@ -63,12 +63,12 @@ static bool test_detected_without_results_recovers(void)
     return true;
 }
 
-static bool test_session_watchdog_covers_completed_hang_regression(void)
+static bool test_session_timeout_forces_recovery(void)
 {
-    ASSERT_TRUE(!assistant_session_watchdog_expired(false, true, 30000, 30000));
-    ASSERT_TRUE(!assistant_session_watchdog_expired(true, false, 30000, 30000));
-    ASSERT_TRUE(!assistant_session_watchdog_expired(true, true, 29999, 30000));
-    ASSERT_TRUE(assistant_session_watchdog_expired(true, true, 30000, 30000));
+    ASSERT_TRUE(!assistant_session_timed_out(false, true, 30000, 30000));
+    ASSERT_TRUE(!assistant_session_timed_out(true, false, 30000, 30000));
+    ASSERT_TRUE(!assistant_session_timed_out(true, true, 29999, 30000));
+    ASSERT_TRUE(assistant_session_timed_out(true, true, 30000, 30000));
     return true;
 }
 
@@ -134,7 +134,7 @@ int main(void)
     run_test("command_timeout_forces_recovery", test_command_timeout_forces_recovery);
     run_test("timeout_rules_match_listening_behavior", test_timeout_rules_match_listening_behavior);
     run_test("detected_without_results_recovers", test_detected_without_results_recovers);
-    run_test("session_watchdog_covers_completed_hang_regression", test_session_watchdog_covers_completed_hang_regression);
+    run_test("session_timeout_forces_recovery", test_session_timeout_forces_recovery);
     run_test("weather_detail_today_includes_date_and_current_conditions",
              test_weather_detail_today_includes_date_and_current_conditions);
     run_test("weather_detail_tomorrow_shows_date_without_now_line",

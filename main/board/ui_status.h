@@ -14,4 +14,3 @@ typedef enum {
 
 esp_err_t ui_status_init(void);
 void ui_status_set(ui_status_state_t state, const char *detail);
-void ui_status_note_activity(void);

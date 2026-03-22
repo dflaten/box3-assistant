@@ -56,17 +56,17 @@ assistant_listen_step_t assistant_step_for_multinet(uint32_t elapsed_ms,
 }
 
 /**
- * @brief Check whether the assistant awake-session watchdog should force recovery.
- * @param assistant_awake True when the assistant is currently awake.
+ * @brief Check whether the current assistant session has exceeded its timeout.
+ * @param assistant_awake True when the assistant is currently in an active session.
  * @param have_awake_tick True when a valid awake timestamp is available.
  * @param elapsed_ms Milliseconds elapsed since the awake timestamp.
  * @param session_timeout_ms Maximum allowed awake-session duration.
- * @return True if the session should be treated as expired, otherwise false.
+ * @return True if the active session has timed out, otherwise false.
  */
-bool assistant_session_watchdog_expired(bool assistant_awake,
-                                        bool have_awake_tick,
-                                        uint32_t elapsed_ms,
-                                        uint32_t session_timeout_ms)
+bool assistant_session_timed_out(bool assistant_awake,
+                                 bool have_awake_tick,
+                                 uint32_t elapsed_ms,
+                                 uint32_t session_timeout_ms)
 {
     return assistant_awake && have_awake_tick && elapsed_ms >= session_timeout_ms;
 }

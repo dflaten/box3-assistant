@@ -219,56 +219,13 @@ static esp_err_t hue_http_perform(const char *url,
 }
 
 /**
- * @brief Send an on or off action to a specific Hue group ID.
- * @param group_id The Hue bridge group identifier to control.
- * @param on True to turn the group on, false to turn it off.
- * @return ESP_OK on success, or an ESP error code if the request fails.
- */
-esp_err_t hue_client_set_group_by_id(const char *group_id, bool on)
-{
-    if (group_id == NULL || group_id[0] == '\0') {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    char url[192];
-    snprintf(url, sizeof(url),
-             "http://%s/api/%s/groups/%s/action",
-             CONFIG_HUE_BRIDGE_IP,
-             CONFIG_HUE_BRIDGE_API_KEY,
-             group_id);
-
-    const char *body = on ? "{\"on\":true}" : "{\"on\":false}";
-    hue_http_trace_t trace = { 0 };
-    ESP_RETURN_ON_ERROR(hue_http_trace_init(&trace), TAG, "Failed to allocate HTTP trace buffer");
-
-    ESP_LOGI(TAG, "Sending Hue group action: bridge=%s group=%s payload=%s",
-             CONFIG_HUE_BRIDGE_IP,
-             group_id,
-             body);
-
-    esp_err_t err = hue_http_perform(url, HTTP_METHOD_PUT, body, &trace, NULL);
-    hue_http_trace_deinit(&trace);
-    return err;
-}
-
-/**
- * @brief Send an on or off action to the configured default Hue group.
- * @param on True to turn the group on, false to turn it off.
- * @return ESP_OK on success, or an ESP error code if the request fails.
- */
-esp_err_t hue_client_set_group(bool on)
-{
-    return hue_client_set_group_by_id(CONFIG_HUE_BRIDGE_GROUP_ID, on);
-}
-
-/**
  * @brief Fetch the raw Hue groups list from the configured bridge.
  * @param groups Output array for fetched group entries.
  * @param max_groups Maximum number of entries that fit in the output array.
  * @param out_count Output for the number of groups written.
  * @return ESP_OK on success, or an ESP error code if fetch or parsing fails.
  */
-esp_err_t hue_client_fetch_groups(hue_group_t *groups, size_t max_groups, size_t *out_count)
+static esp_err_t hue_client_fetch_groups(hue_group_t *groups, size_t max_groups, size_t *out_count)
 {
     if (groups == NULL || out_count == NULL) {
         return ESP_ERR_INVALID_ARG;
@@ -333,6 +290,39 @@ esp_err_t hue_client_fetch_groups(hue_group_t *groups, size_t max_groups, size_t
     *out_count = count;
     ESP_LOGI(TAG, "Fetched %u Hue group(s) from bridge", (unsigned)count);
     return ESP_OK;
+}
+
+/**
+ * @brief Send an on or off action to a specific Hue group ID.
+ * @param group_id The Hue bridge group identifier to control.
+ * @param on True to turn the group on, false to turn it off.
+ * @return ESP_OK on success, or an ESP error code if the request fails.
+ */
+esp_err_t hue_client_set_group_by_id(const char *group_id, bool on)
+{
+    if (group_id == NULL || group_id[0] == '\0') {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    char url[192];
+    snprintf(url, sizeof(url),
+             "http://%s/api/%s/groups/%s/action",
+             CONFIG_HUE_BRIDGE_IP,
+             CONFIG_HUE_BRIDGE_API_KEY,
+             group_id);
+
+    const char *body = on ? "{\"on\":true}" : "{\"on\":false}";
+    hue_http_trace_t trace = { 0 };
+    ESP_RETURN_ON_ERROR(hue_http_trace_init(&trace), TAG, "Failed to allocate HTTP trace buffer");
+
+    ESP_LOGI(TAG, "Sending Hue group action: bridge=%s group=%s payload=%s",
+             CONFIG_HUE_BRIDGE_IP,
+             group_id,
+             body);
+
+    esp_err_t err = hue_http_perform(url, HTTP_METHOD_PUT, body, &trace, NULL);
+    hue_http_trace_deinit(&trace);
+    return err;
 }
 
 /**

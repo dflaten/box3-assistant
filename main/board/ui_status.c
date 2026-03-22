@@ -448,7 +448,7 @@ esp_err_t ui_status_init(void)
  * @return This function does not return a value.
  * @note Calls made before UI initialization are ignored.
  */
-void ui_status_note_activity(void)
+static void ui_status_note_activity(void)
 {
     if (!s_ready) {
         return;
