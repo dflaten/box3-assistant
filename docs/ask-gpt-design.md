@@ -31,7 +31,7 @@ Example:
 
 1. `Hi ESP`
 2. `Ask GPT`
-3. `What is the weather supposed to be like tomorrow?`
+3. `What is the 2nd largest mountain in the world?`
 4. local machine transcribes the question
 5. device sends text to ChatGPT
 6. screen shows the answer

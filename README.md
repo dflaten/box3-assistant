@@ -15,9 +15,19 @@ The project currently includes:
 - Hue bridge control path
 - Open-Meteo weather commands for a configurable location
 - on-device weather display with multiline forecast details
-- host-side unit tests for assistant state and weather formatting
+- host-side unit tests for assistant state, command labeling, and weather formatting
 
 Planned future work includes local spoken weather playback, broader assistant features, richer UI, ChatGPT-backed interactions, and Jellyfin/media support.
+
+## Architecture
+
+The firmware is currently organized around a small set of runtime-oriented modules:
+
+- `main/box3_assistant.c` owns boot flow, task startup, and top-level assistant orchestration
+- `main/assistant_runtime.h` defines the shared in-memory `assistant_runtime_t` state passed through assistant helpers and tasks
+- `main/hue/hue_command_runtime.c` owns loading stored Hue groups, syncing groups from the bridge, and rebuilding the runtime speech command table
+- `main/assistant_command_text.c` formats user-facing labels for built-in and Hue-backed commands
+- `main/assistant_state.c` holds pure assistant state/timeout decision helpers used by the runtime
 
 ## Design Docs
 
@@ -231,12 +241,13 @@ Note: the firmware uses Espressif's built-in `Hi, ESP` WakeNet model (`wn9s_hies
 
 ## Tests
 
-Host-side unit tests cover assistant state-machine decisions and weather formatting regressions, including the hang fixes for:
+Host-side unit tests cover assistant state-machine decisions, command-label formatting, and weather formatting regressions, including the recovery logic for:
 
 - listening timeout recovery
 - repeated missing AFE fetch recovery
 - empty MultiNet result recovery
-- awake-session watchdog recovery
+- assistant session timeout recovery
+- built-in and Hue command label formatting
 
 Run them with:
 
@@ -244,7 +255,7 @@ Run them with:
 ./tests/run_unit_tests.sh
 ```
 
-Or from the ESP-IDF build tree:
+Or from the build tree:
 
 ```bash
 cmake --build build --target unit-tests
