@@ -1,8 +1,8 @@
 #include <stdbool.h>
 #include <stdio.h>
 
-#include "assistant_command_text.h"
-#include "assistant_commands.h"
+#include "commands/assistant_command_text.h"
+#include "commands/assistant_commands.h"
 #include "hue/hue_command_map.h"
 
 const char *assistant_command_text(int command_id,

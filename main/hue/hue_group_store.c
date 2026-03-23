@@ -84,8 +84,8 @@ esp_err_t hue_group_store_load(hue_group_t *groups, size_t max_groups, size_t *o
     free(json);
     if (!cJSON_IsArray(root)) {
         cJSON_Delete(root);
-        ESP_LOGW(TAG, "Stored Hue groups file is invalid; ignoring it");
-        return ESP_FAIL;
+        ESP_LOGW(TAG, "Stored Hue groups file is invalid; starting with no saved groups");
+        return ESP_OK;
     }
 
     size_t count = 0;

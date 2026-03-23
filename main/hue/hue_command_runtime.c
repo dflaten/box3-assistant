@@ -7,6 +7,7 @@
 #include "esp_log.h"
 #include "esp_mn_speech_commands.h"
 
+#include "commands/assistant_commands.h"
 #include "hue/hue_client.h"
 #include "hue/hue_command_map.h"
 #include "hue/hue_command_runtime.h"

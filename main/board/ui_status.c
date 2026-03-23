@@ -291,6 +291,18 @@ static int text_width(const char *text, int scale)
 }
 
 /**
+ * @brief Calculate the maximum number of monospaced characters that fit on one UI text line.
+ * @param scale Pixel scale factor for the built-in font.
+ * @return The maximum character count that fits within the screen width.
+ */
+static int max_chars_per_line(int scale)
+{
+    const int char_width = (5 * scale) + UI_CHAR_SPACING;
+    int max_chars = (UI_SCREEN_WIDTH + UI_CHAR_SPACING) / char_width;
+    return max_chars > 0 ? max_chars : 1;
+}
+
+/**
  * @brief Draw a single centered line of text on the status screen.
  * @param y Top pixel position for the text baseline block.
  * @param scale Pixel scale factor for the built-in font.
@@ -334,25 +346,50 @@ static void draw_text_block_centered(int start_y, int scale, uint16_t color, con
         return;
     }
 
+    const int max_chars = max_chars_per_line(scale);
     const int line_height = (7 * scale) + (scale * 2);
-    const char *line_start = text;
+    const char *cursor = text;
     int line_index = 0;
 
-    while (*line_start != '\0') {
-        const char *line_end = strchr(line_start, '\n');
-        size_t line_len = line_end != NULL ? (size_t)(line_end - line_start) : strlen(line_start);
+    while (*cursor != '\0') {
         char line[64];
-        size_t copy_len = line_len < sizeof(line) - 1 ? line_len : sizeof(line) - 1;
-        memcpy(line, line_start, copy_len);
-        line[copy_len] = '\0';
+        size_t line_len = 0;
+        const char *segment_end = cursor;
+        const char *last_space = NULL;
+
+        while (*segment_end != '\0' && *segment_end != '\n' && line_len < (size_t)max_chars) {
+            if (*segment_end == ' ') {
+                last_space = segment_end;
+            }
+            segment_end++;
+            line_len++;
+        }
+
+        if (*segment_end != '\0' && *segment_end != '\n' && line_len == (size_t)max_chars && last_space != NULL) {
+            segment_end = last_space;
+            line_len = (size_t)(segment_end - cursor);
+        }
+
+        if (line_len >= sizeof(line)) {
+            line_len = sizeof(line) - 1;
+        }
+
+        memcpy(line, cursor, line_len);
+        line[line_len] = '\0';
 
         draw_text_centered(start_y + (line_index * line_height), scale, color, line);
         line_index++;
 
-        if (line_end == NULL) {
+        cursor = segment_end;
+        while (*cursor == ' ') {
+            cursor++;
+        }
+        if (*cursor == '\n') {
+            cursor++;
+        }
+        if (*cursor == '\0') {
             break;
         }
-        line_start = line_end + 1;
     }
 }
 

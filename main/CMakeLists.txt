@@ -1,6 +1,7 @@
 idf_component_register(
     SRCS
-        "assistant_command_text.c"
+        "commands/assistant_command_dispatch.c"
+        "commands/assistant_command_text.c"
         "board/board_audio.c"
         "board/ui_status.c"
         "assistant_state.c"

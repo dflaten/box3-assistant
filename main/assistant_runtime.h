@@ -24,6 +24,10 @@ typedef struct {
     bool commands_allocated;
     /** Set to pause microphone feeding while command execution or recovery work is in progress. */
     volatile bool pause_audio_feed;
+    /** True while the audio feed task is between its pause check and the end of the current read/feed cycle. */
+    volatile bool audio_feed_busy;
+    /** True once the audio feed task has observed pause_audio_feed and entered its paused loop. */
+    volatile bool audio_feed_paused;
     /** Tick count captured when the current assistant session began. */
     TickType_t assistant_awake_tick;
     /** MultiNet interface selected from the ESP-SR model bundle. */

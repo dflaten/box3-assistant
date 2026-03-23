@@ -21,8 +21,9 @@
 #include "esp_codec_dev.h"
 #include "flite_g2p.h"
 
-#include "assistant_command_text.h"
-#include "assistant_commands.h"
+#include "commands/assistant_command_text.h"
+#include "commands/assistant_command_dispatch.h"
+#include "commands/assistant_commands.h"
 #include "assistant_state.h"
 #include "assistant_runtime.h"
 #include "board/board_audio.h"
@@ -50,6 +51,7 @@ static void audio_feed_set_paused(assistant_runtime_t *rt, bool paused);
 
 /**
  * @brief Reset the assistant back to standby mode.
+ * @param rt Shared assistant runtime state to reset back to standby.
  * @return This function does not return a value.
  * @note This clears the active recognition state, resets the AFE buffer, and re-enables WakeNet.
  */
@@ -58,6 +60,14 @@ static void return_to_standby(assistant_runtime_t *rt)
     rt->assistant_awake = false;
     rt->assistant_awake_tick = 0;
     audio_feed_set_paused(rt, true);
+    TickType_t wait_start = xTaskGetTickCount();
+    while (rt->audio_feed_busy || !rt->audio_feed_paused) {
+        if ((xTaskGetTickCount() - wait_start) >= pdMS_TO_TICKS(500)) {
+            ESP_LOGW(TAG, "Timed out waiting for audio feed task to pause cleanly");
+            break;
+        }
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
     if (rt->multinet != NULL && rt->model_data != NULL) {
         rt->multinet->clean(rt->model_data);
     }
@@ -71,7 +81,7 @@ static void return_to_standby(assistant_runtime_t *rt)
 
 /**
  * @brief Watch for assistant sessions that stay awake too long and force recovery.
- * @param arg Unused FreeRTOS task parameter.
+ * @param arg Pointer to the shared assistant runtime state.
  * @return This task does not return.
  * @note The watchdog exists to recover from stuck listening, working, or completed states.
  */
@@ -105,6 +115,7 @@ static void assistant_session_timeout_task(void *arg)
 
 /**
  * @brief Initialize the speech models and audio front end used by the assistant.
+ * @param rt Shared assistant runtime state that receives initialized model and AFE handles.
  * @return ESP_OK on success, or an ESP error code if models or AFE setup fail.
  * @note This selects the enabled WakeNet and MultiNet models from the ESP-SR model partition.
  */
@@ -181,6 +192,7 @@ static esp_err_t init_models(assistant_runtime_t *rt)
 
 /**
  * @brief Pause or resume microphone feeding into the speech front end.
+ * @param rt Shared assistant runtime state whose audio-feed pause flag will be updated.
  * @param paused True to stop feeding audio, false to resume feeding audio.
  * @return This function does not return a value.
  * @note Audio is paused during command execution so the AFE ring buffer does not overflow.
@@ -192,7 +204,7 @@ static void audio_feed_set_paused(assistant_runtime_t *rt, bool paused)
 
 /**
  * @brief Continuously read microphone audio and feed it into the AFE pipeline.
- * @param arg Unused FreeRTOS task parameter.
+ * @param arg Pointer to the shared assistant runtime state.
  * @return This task does not return.
  * @note Feed failures are logged and retried without terminating the task.
  */
@@ -215,18 +227,34 @@ static void audio_feed_task(void *arg)
 
     while (true) {
         if (rt->pause_audio_feed) {
+            rt->audio_feed_busy = false;
+            rt->audio_feed_paused = true;
             vTaskDelay(pdMS_TO_TICKS(20));
+            continue;
+        }
+        rt->audio_feed_paused = false;
+        rt->audio_feed_busy = true;
+
+        if (rt->pause_audio_feed) {
+            rt->audio_feed_busy = false;
             continue;
         }
 
         int ret = esp_codec_dev_read(rt->mic_codec, feed_buffer, feed_bytes);
         if (ret != ESP_CODEC_DEV_OK) {
+            rt->audio_feed_busy = false;
             ESP_LOGW(TAG, "Microphone read failed: %d", ret);
             vTaskDelay(pdMS_TO_TICKS(20));
             continue;
         }
 
+        if (rt->pause_audio_feed) {
+            rt->audio_feed_busy = false;
+            continue;
+        }
+
         int fed = rt->afe_handle->feed(rt->afe_data, feed_buffer);
+        rt->audio_feed_busy = false;
         if (fed <= 0) {
             ESP_LOGW(TAG, "AFE feed failed: %d", fed);
             vTaskDelay(pdMS_TO_TICKS(10));
@@ -236,7 +264,7 @@ static void audio_feed_task(void *arg)
 
 /**
  * @brief Run the wake/listen state machine and dispatch recognized commands.
- * @param arg Unused FreeRTOS task parameter.
+ * @param arg Pointer to the shared assistant runtime state.
  * @return This task does not return.
  * @note This task handles wake word detection, command timeout recovery, and command execution.
  */
@@ -363,28 +391,32 @@ static void speech_detect_task(void *arg)
         esp_err_t action_err = ESP_FAIL;
         char action_detail[WEATHER_DETAIL_TEXT_LEN] = { 0 };
         TickType_t hold_time = STATUS_HOLD_TIME;
-        if (command_id == ASSISTANT_CMD_SYNC_GROUPS) {
+        assistant_command_dispatch_t dispatch;
+        assistant_command_resolve(command_id, rt->group_count, &dispatch);
+
+        if (dispatch.type == ASSISTANT_COMMAND_ACTION_SYNC_GROUPS) {
             action_err = hue_command_runtime_sync_groups(rt,
                                                          ASSISTANT_CMD_SYNC_GROUPS,
                                                          ASSISTANT_CMD_WEATHER_TODAY,
                                                          ASSISTANT_CMD_WEATHER_TOMORROW,
                                                          ASSISTANT_CMD_GROUP_BASE);
-        } else if (command_id == ASSISTANT_CMD_WEATHER_TODAY || command_id == ASSISTANT_CMD_WEATHER_TOMORROW) {
+        } else if (dispatch.type == ASSISTANT_COMMAND_ACTION_WEATHER_TODAY ||
+                   dispatch.type == ASSISTANT_COMMAND_ACTION_WEATHER_TOMORROW) {
             weather_report_t report = { 0 };
-            action_err = (command_id == ASSISTANT_CMD_WEATHER_TODAY)
+            action_err = (dispatch.type == ASSISTANT_COMMAND_ACTION_WEATHER_TODAY)
                              ? weather_client_fetch_today(&report)
                              : weather_client_fetch_tomorrow(&report);
             if (action_err == ESP_OK) {
                 weather_format_detail(&report, action_detail, sizeof(action_detail));
                 hold_time = WEATHER_STATUS_HOLD_TIME;
             }
+        } else if (dispatch.type == ASSISTANT_COMMAND_ACTION_HUE_GROUP) {
+            action_err = hue_client_set_group_by_id(rt->groups[dispatch.group_index].id, dispatch.on);
         } else {
-            size_t group_index = 0;
-            bool on = false;
-            if (hue_decode_group_command_id(command_id, ASSISTANT_CMD_GROUP_BASE, rt->group_count, &group_index, &on)) {
-                action_err = hue_client_set_group_by_id(rt->groups[group_index].id, on);
-            } else {
+            if (dispatch.type == ASSISTANT_COMMAND_ACTION_UNKNOWN) {
                 ESP_LOGW(TAG, "Unhandled command id %d", command_id);
+            } else {
+                ESP_LOGW(TAG, "Unhandled command action %d for id %d", dispatch.type, command_id);
             }
         }
 
