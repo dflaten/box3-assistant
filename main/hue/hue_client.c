@@ -191,6 +191,9 @@ static esp_err_t hue_http_perform(const char *url,
         return ESP_OK;
     }
 
+    // Some Hue bridge firmware returns a valid 2xx chunked JSON body but closes in a way
+    // esp_http_client reports as incomplete. We already have the success payload, so treat
+    // this specific case as success instead of surfacing it as a failed light action.
     if (err == ESP_ERR_HTTP_INCOMPLETE_DATA && status >= 200 && status < 300) {
         ESP_LOGW(TAG, "Hue response ended early but bridge returned HTTP %d; treating as success", status);
         ESP_LOGW(TAG, "Hue response details: content_length=%lld, chunked=%s, response_bytes=%d",
