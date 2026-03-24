@@ -48,6 +48,7 @@ static const TickType_t STATUS_HOLD_TIME = pdMS_TO_TICKS(1200);
 static const TickType_t WEATHER_STATUS_HOLD_TIME = pdMS_TO_TICKS(WEATHER_STATUS_HOLD_MS);
 
 static void audio_feed_set_paused(assistant_runtime_t *rt, bool paused);
+static void show_status_then_return_to_standby(assistant_runtime_t *rt, ui_status_state_t state, const char *detail, TickType_t hold_time);
 
 /**
  * @brief Reset the assistant back to standby mode.
@@ -80,6 +81,24 @@ static void return_to_standby(assistant_runtime_t *rt)
 }
 
 /**
+ * @brief Show a transient UI status while audio is paused, then restore standby mode.
+ * @param rt Shared assistant runtime state to pause and reset.
+ * @param state The status state to show during the hold period.
+ * @param detail Optional detail text shown while the status is held.
+ * @param hold_time Duration to keep the transient status visible before returning to standby.
+ * @return This function does not return a value.
+ * @note Pausing first prevents the AFE feed ringbuffer from filling while the detect task is sleeping.
+ */
+static void show_status_then_return_to_standby(assistant_runtime_t *rt, ui_status_state_t state, const char *detail, TickType_t hold_time)
+{
+    audio_feed_set_paused(rt, true);
+    ui_status_set(state, detail);
+    vTaskDelay(hold_time);
+    return_to_standby(rt);
+    ui_status_set(UI_STATUS_READY, NULL);
+}
+
+/**
  * @brief Watch for assistant sessions that stay awake too long and force recovery.
  * @param arg Pointer to the shared assistant runtime state.
  * @return This task does not return.
@@ -105,10 +124,7 @@ static void assistant_session_timeout_task(void *arg)
         }
 
         ESP_LOGW(TAG, "Assistant session exceeded %d ms; forcing standby recovery", ASSISTANT_SESSION_TIMEOUT_MS);
-        ui_status_set(UI_STATUS_ERROR, "Assistant reset");
-        vTaskDelay(STATUS_HOLD_TIME);
-        return_to_standby(rt);
-        ui_status_set(UI_STATUS_READY, NULL);
+        show_status_then_return_to_standby(rt, UI_STATUS_ERROR, "Assistant reset", STATUS_HOLD_TIME);
     }
 }
 
@@ -285,10 +301,7 @@ static void speech_detect_task(void *arg)
             if (assistant_step_for_missing_fetch(rt->assistant_awake, fetch_failures, MAX_FETCH_FAILURES) ==
                 ASSISTANT_LISTEN_STEP_RECOVER_FETCH_STALL) {
                 ESP_LOGW(TAG, "AFE fetch stalled while listening; forcing standby recovery");
-                ui_status_set(UI_STATUS_ERROR, "Audio timeout");
-                vTaskDelay(STATUS_HOLD_TIME);
-                return_to_standby(rt);
-                ui_status_set(UI_STATUS_READY, NULL);
+                show_status_then_return_to_standby(rt, UI_STATUS_ERROR, "Audio timeout", STATUS_HOLD_TIME);
                 fetch_failures = 0;
             }
             continue;
@@ -316,10 +329,7 @@ static void speech_detect_task(void *arg)
                                                                           true);
         if (listen_step == ASSISTANT_LISTEN_STEP_RECOVER_COMMAND_TIMEOUT) {
             ESP_LOGW(TAG, "Forcing standby after %lu ms without a final command state", (unsigned long)elapsed_ms);
-            ui_status_set(UI_STATUS_ERROR, "Command timeout");
-            vTaskDelay(STATUS_HOLD_TIME);
-            return_to_standby(rt);
-            ui_status_set(UI_STATUS_READY, NULL);
+            show_status_then_return_to_standby(rt, UI_STATUS_ERROR, "Command timeout", STATUS_HOLD_TIME);
             continue;
         }
 
@@ -344,10 +354,7 @@ static void speech_detect_task(void *arg)
         }
         if (listen_step == ASSISTANT_LISTEN_STEP_RECOVER_NO_COMMAND) {
             ESP_LOGI(TAG, "Command window timed out after wake word at %lu ms", (unsigned long)elapsed_ms);
-            ui_status_set(UI_STATUS_ERROR, "No command heard");
-            vTaskDelay(STATUS_HOLD_TIME);
-            return_to_standby(rt);
-            ui_status_set(UI_STATUS_READY, NULL);
+            show_status_then_return_to_standby(rt, UI_STATUS_ERROR, "No command heard", STATUS_HOLD_TIME);
             continue;
         }
 
@@ -364,10 +371,7 @@ static void speech_detect_task(void *arg)
                                         mn_result != NULL && mn_result->num > 0) ==
             ASSISTANT_LISTEN_STEP_RECOVER_EMPTY_RESULT) {
             ESP_LOGW(TAG, "MultiNet reported detection without results; forcing standby recovery");
-            ui_status_set(UI_STATUS_ERROR, "Command decode failed");
-            vTaskDelay(STATUS_HOLD_TIME);
-            return_to_standby(rt);
-            ui_status_set(UI_STATUS_READY, NULL);
+            show_status_then_return_to_standby(rt, UI_STATUS_ERROR, "Command decode failed", STATUS_HOLD_TIME);
             continue;
         }
 
