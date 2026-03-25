@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 #include "freertos/task.h"
 
 #include "esp_check.h"
@@ -35,6 +36,7 @@ static bool s_display_on;
 static ui_status_state_t s_current_state = UI_STATUS_BOOTING;
 static TickType_t s_last_activity_tick;
 static uint16_t s_line_buffer[UI_SCREEN_WIDTH];
+static SemaphoreHandle_t s_ui_mutex;
 
 typedef struct {
     char code;
@@ -429,17 +431,19 @@ static void ui_idle_task(void *arg)
 {
     while (true) {
         vTaskDelay(pdMS_TO_TICKS(UI_IDLE_POLL_MS));
-        if (!s_ready || !s_display_on) {
-            continue;
-        }
-        if (s_current_state != UI_STATUS_READY) {
+        if (!s_ready || s_ui_mutex == NULL) {
             continue;
         }
 
-        TickType_t idle_ticks = xTaskGetTickCount() - s_last_activity_tick;
-        if (idle_ticks >= pdMS_TO_TICKS(UI_IDLE_TIMEOUT_MS)) {
-            ESP_LOGI(TAG, "Display idle timeout reached; turning screen off");
-            display_power_set(false);
+        if (xSemaphoreTake(s_ui_mutex, portMAX_DELAY) == pdTRUE) {
+            if (s_display_on && s_current_state == UI_STATUS_READY) {
+                TickType_t idle_ticks = xTaskGetTickCount() - s_last_activity_tick;
+                if (idle_ticks >= pdMS_TO_TICKS(UI_IDLE_TIMEOUT_MS)) {
+                    ESP_LOGI(TAG, "Display idle timeout reached; turning screen off");
+                    display_power_set(false);
+                }
+            }
+            xSemaphoreGive(s_ui_mutex);
         }
     }
 }
@@ -473,6 +477,12 @@ esp_err_t ui_status_init(void)
         ESP_LOGW(TAG, "Failed to enable display backlight: %s", esp_err_to_name(err));
     }
 
+    s_ui_mutex = xSemaphoreCreateMutex();
+    if (s_ui_mutex == NULL) {
+        ESP_LOGE(TAG, "Failed to allocate UI mutex");
+        return ESP_ERR_NO_MEM;
+    }
+
     s_last_activity_tick = xTaskGetTickCount();
     s_ready = true;
     xTaskCreate(ui_idle_task, "ui_idle", UI_IDLE_TASK_STACK, NULL, UI_IDLE_TASK_PRIORITY, NULL);
@@ -487,9 +497,6 @@ esp_err_t ui_status_init(void)
  */
 static void ui_status_note_activity(void)
 {
-    if (!s_ready) {
-        return;
-    }
     s_last_activity_tick = xTaskGetTickCount();
 }
 
@@ -502,7 +509,11 @@ static void ui_status_note_activity(void)
  */
 void ui_status_set(ui_status_state_t state, const char *detail)
 {
-    if (!s_ready) {
+    if (!s_ready || s_ui_mutex == NULL) {
+        return;
+    }
+
+    if (xSemaphoreTake(s_ui_mutex, portMAX_DELAY) != pdTRUE) {
         return;
     }
 
@@ -510,4 +521,6 @@ void ui_status_set(ui_status_state_t state, const char *detail)
     s_current_state = state;
     display_power_set(true);
     render_status(state, detail);
+
+    xSemaphoreGive(s_ui_mutex);
 }

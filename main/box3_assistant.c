@@ -17,6 +17,7 @@
 #include "esp_mn_iface.h"
 #include "esp_mn_models.h"
 #include "esp_mn_speech_commands.h"
+#include "esp_system.h"
 #include "esp_wn_models.h"
 #include "esp_codec_dev.h"
 #include "flite_g2p.h"
@@ -40,6 +41,7 @@
 #define WEATHER_STATUS_HOLD_MS 15000
 #define MAX_FETCH_FAILURES 50
 #define ASSISTANT_SESSION_TIMEOUT_MS 30000
+#define ASSISTANT_LISTENING_STALL_TIMEOUT_MS 12000
 #define ASSISTANT_WATCHDOG_POLL_MS 1000
 
 static const char *TAG = "hue-voice";
@@ -49,6 +51,20 @@ static const TickType_t WEATHER_STATUS_HOLD_TIME = pdMS_TO_TICKS(WEATHER_STATUS_
 
 static void audio_feed_set_paused(assistant_runtime_t *rt, bool paused);
 static void show_status_then_return_to_standby(assistant_runtime_t *rt, ui_status_state_t state, const char *detail, TickType_t hold_time);
+
+static const char *assistant_stage_name(assistant_stage_t stage)
+{
+    switch (stage) {
+    case ASSISTANT_STAGE_STANDBY:
+        return "standby";
+    case ASSISTANT_STAGE_LISTENING:
+        return "listening";
+    case ASSISTANT_STAGE_EXECUTING:
+        return "executing";
+    default:
+        return "unknown";
+    }
+}
 
 /**
  * @brief Reset the assistant back to standby mode.
@@ -60,6 +76,7 @@ static void return_to_standby(assistant_runtime_t *rt)
 {
     rt->assistant_awake = false;
     rt->assistant_awake_tick = 0;
+    rt->speech_progress_tick = xTaskGetTickCount();
     audio_feed_set_paused(rt, true);
     TickType_t wait_start = xTaskGetTickCount();
     while (rt->audio_feed_busy || !rt->audio_feed_paused) {
@@ -77,6 +94,8 @@ static void return_to_standby(assistant_runtime_t *rt)
         rt->afe_handle->enable_wakenet(rt->afe_data);
     }
     audio_feed_set_paused(rt, false);
+    rt->assistant_stage = ASSISTANT_STAGE_STANDBY;
+    rt->speech_progress_tick = xTaskGetTickCount();
     ESP_LOGI(TAG, "Assistant returned to standby");
 }
 
@@ -115,16 +134,30 @@ static void assistant_session_timeout_task(void *arg)
             continue;
         }
 
-        TickType_t elapsed_ms = pdTICKS_TO_MS(xTaskGetTickCount() - rt->assistant_awake_tick);
-        if (!assistant_session_timed_out(rt->assistant_awake,
-                                         rt->assistant_awake_tick != 0,
-                                         elapsed_ms,
-                                         ASSISTANT_SESSION_TIMEOUT_MS)) {
-            continue;
+        TickType_t now = xTaskGetTickCount();
+        TickType_t elapsed_ms = pdTICKS_TO_MS(now - rt->assistant_awake_tick);
+        TickType_t stalled_ms = rt->speech_progress_tick == 0 ? 0 : pdTICKS_TO_MS(now - rt->speech_progress_tick);
+
+        if (rt->assistant_stage == ASSISTANT_STAGE_LISTENING &&
+            rt->speech_progress_tick != 0 &&
+            stalled_ms >= ASSISTANT_LISTENING_STALL_TIMEOUT_MS) {
+            ESP_LOGE(TAG,
+                     "Speech pipeline stalled in %s for %lu ms; restarting",
+                     assistant_stage_name(rt->assistant_stage),
+                     (unsigned long)stalled_ms);
+            esp_restart();
         }
 
-        ESP_LOGW(TAG, "Assistant session exceeded %d ms; forcing standby recovery", ASSISTANT_SESSION_TIMEOUT_MS);
-        show_status_then_return_to_standby(rt, UI_STATUS_ERROR, "Assistant reset", STATUS_HOLD_TIME);
+        if (assistant_session_timed_out(rt->assistant_awake,
+                                        rt->assistant_awake_tick != 0,
+                                        elapsed_ms,
+                                        ASSISTANT_SESSION_TIMEOUT_MS)) {
+            ESP_LOGE(TAG,
+                     "Assistant session exceeded %d ms in %s; restarting",
+                     ASSISTANT_SESSION_TIMEOUT_MS,
+                     assistant_stage_name(rt->assistant_stage));
+            esp_restart();
+        }
     }
 }
 
@@ -293,6 +326,7 @@ static void speech_detect_task(void *arg)
     ESP_LOGI(TAG, "Starting speech detect task");
 
     while (true) {
+        rt->speech_progress_tick = xTaskGetTickCount();
         afe_fetch_result_t *afe_result = rt->afe_handle->fetch(rt->afe_data);
         if (afe_result == NULL || afe_result->data == NULL) {
             if (rt->assistant_awake && fetch_failures < MAX_FETCH_FAILURES) {
@@ -307,12 +341,15 @@ static void speech_detect_task(void *arg)
             continue;
         }
         fetch_failures = 0;
+        rt->speech_progress_tick = xTaskGetTickCount();
 
         if (!rt->assistant_awake) {
             if (afe_result->wakeup_state == WAKENET_DETECTED) {
                 rt->assistant_awake = true;
                 wake_tick = xTaskGetTickCount();
                 rt->assistant_awake_tick = wake_tick;
+                rt->speech_progress_tick = wake_tick;
+                rt->assistant_stage = ASSISTANT_STAGE_LISTENING;
                 rt->multinet->clean(rt->model_data);
                 rt->afe_handle->disable_wakenet(rt->afe_data);
                 ESP_LOGI(TAG, "Wake word detected: %s", WAKE_WORD);
@@ -390,6 +427,8 @@ static void speech_detect_task(void *arg)
                  (unsigned long)elapsed_ms);
 
         audio_feed_set_paused(rt, true);
+        rt->assistant_stage = ASSISTANT_STAGE_EXECUTING;
+        rt->speech_progress_tick = xTaskGetTickCount();
         ui_status_set(UI_STATUS_WORKING, command_text);
 
         esp_err_t action_err = ESP_FAIL;
@@ -445,6 +484,8 @@ void app_main(void)
 {
     static assistant_runtime_t runtime;
     assistant_runtime_t *rt = &runtime;
+    rt->assistant_stage = ASSISTANT_STAGE_STANDBY;
+    rt->speech_progress_tick = xTaskGetTickCount();
 
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {

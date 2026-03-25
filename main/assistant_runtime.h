@@ -13,6 +13,12 @@
 
 #define ASSISTANT_MAX_SYNCED_GROUPS HUE_GROUP_MAX_COUNT
 
+typedef enum {
+    ASSISTANT_STAGE_STANDBY = 0,
+    ASSISTANT_STAGE_LISTENING,
+    ASSISTANT_STAGE_EXECUTING,
+} assistant_stage_t;
+
 /**
  * @brief Shared in-memory runtime state for the assistant firmware.
  * @note A single instance is created in app_main() and passed to task entry points and helpers.
@@ -30,6 +36,10 @@ typedef struct {
     volatile bool audio_feed_paused;
     /** Tick count captured when the current assistant session began. */
     TickType_t assistant_awake_tick;
+    /** Tick count updated whenever the speech pipeline makes forward progress. */
+    volatile TickType_t speech_progress_tick;
+    /** High-level stage used for watchdog diagnostics. */
+    volatile assistant_stage_t assistant_stage;
     /** MultiNet interface selected from the ESP-SR model bundle. */
     esp_mn_iface_t *multinet;
     /** Opaque model instance owned by the selected MultiNet interface. */
