@@ -13,6 +13,7 @@
 #include "esp_afe_sr_models.h"
 #include "esp_check.h"
 #include "esp_heap_caps.h"
+#include "esp_http_client.h"
 #include "esp_log.h"
 #include "esp_mn_iface.h"
 #include "esp_mn_models.h"
@@ -51,6 +52,7 @@ static const TickType_t WEATHER_STATUS_HOLD_TIME = pdMS_TO_TICKS(WEATHER_STATUS_
 
 static void audio_feed_set_paused(assistant_runtime_t *rt, bool paused);
 static void show_status_then_return_to_standby(assistant_runtime_t *rt, ui_status_state_t state, const char *detail, TickType_t hold_time);
+static void clear_active_session(assistant_runtime_t *rt);
 
 static const char *assistant_stage_name(assistant_stage_t stage)
 {
@@ -115,6 +117,19 @@ static void show_status_then_return_to_standby(assistant_runtime_t *rt, ui_statu
     vTaskDelay(hold_time);
     return_to_standby(rt);
     ui_status_set(UI_STATUS_READY, NULL);
+}
+
+/**
+ * @brief Clear the current wake/listen/execute session without resetting the speech pipeline yet.
+ * @param rt Shared assistant runtime state whose watchdog-visible session state will be cleared.
+ * @return This function does not return a value.
+ * @note This is used once command execution has completed so post-action UI delays do not trip the session watchdog.
+ */
+static void clear_active_session(assistant_runtime_t *rt)
+{
+    rt->assistant_awake = false;
+    rt->assistant_awake_tick = 0;
+    rt->speech_progress_tick = xTaskGetTickCount();
 }
 
 /**
@@ -428,8 +443,11 @@ static void speech_detect_task(void *arg)
 
         audio_feed_set_paused(rt, true);
         rt->assistant_stage = ASSISTANT_STAGE_EXECUTING;
-        rt->speech_progress_tick = xTaskGetTickCount();
+        TickType_t execute_start_tick = xTaskGetTickCount();
+        rt->assistant_awake_tick = execute_start_tick;
+        rt->speech_progress_tick = execute_start_tick;
         ui_status_set(UI_STATUS_WORKING, command_text);
+        ESP_LOGI(TAG, "Starting command execution for id=%d label=\"%s\"", command_id, command_text);
 
         esp_err_t action_err = ESP_FAIL;
         char action_detail[WEATHER_DETAIL_TEXT_LEN] = { 0 };
@@ -452,6 +470,10 @@ static void speech_detect_task(void *arg)
             if (action_err == ESP_OK) {
                 weather_format_detail(&report, action_detail, sizeof(action_detail));
                 hold_time = WEATHER_STATUS_HOLD_TIME;
+            } else if (action_err == ESP_ERR_HTTP_CONNECT || action_err == ESP_ERR_INVALID_STATE) {
+                snprintf(action_detail, sizeof(action_detail), "Weather network error");
+            } else {
+                snprintf(action_detail, sizeof(action_detail), "Weather unavailable");
             }
         } else if (dispatch.type == ASSISTANT_COMMAND_ACTION_HUE_GROUP) {
             action_err = hue_client_set_group_by_id(rt->groups[dispatch.group_index].id, dispatch.on);
@@ -466,9 +488,16 @@ static void speech_detect_task(void *arg)
         if (action_err == ESP_OK) {
             ui_status_set(UI_STATUS_SUCCESS, action_detail[0] != '\0' ? action_detail : command_text);
         } else {
-            ui_status_set(UI_STATUS_ERROR, command_text);
+            ui_status_set(UI_STATUS_ERROR, action_detail[0] != '\0' ? action_detail : command_text);
         }
 
+        ESP_LOGI(TAG,
+                 "Finished command execution for id=%d status=%s elapsed_ms=%lu",
+                 command_id,
+                 action_err == ESP_OK ? "ok" : esp_err_to_name(action_err),
+                 (unsigned long)pdTICKS_TO_MS(xTaskGetTickCount() - execute_start_tick));
+
+        clear_active_session(rt);
         vTaskDelay(hold_time);
         return_to_standby(rt);
         ui_status_set(UI_STATUS_READY, NULL);

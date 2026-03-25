@@ -18,6 +18,7 @@ static const char *TAG = "hue-voice";
 
 static EventGroupHandle_t s_wifi_event_group;
 static int s_retry_num;
+static bool s_wifi_connected;
 
 /**
  * @brief Handle Wi-Fi and IP events for connection startup and reconnects.
@@ -36,6 +37,8 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
     }
 
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
+        s_wifi_connected = false;
+        xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
         if (s_retry_num < CONFIG_HUE_WIFI_MAXIMUM_RETRY) {
             s_retry_num++;
             ESP_LOGW(TAG, "Wi-Fi disconnected, retry %d/%d", s_retry_num, CONFIG_HUE_WIFI_MAXIMUM_RETRY);
@@ -50,6 +53,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
         const ip_event_got_ip_t *event = (const ip_event_got_ip_t *)event_data;
         ESP_LOGI(TAG, "Got IP: " IPSTR, IP2STR(&event->ip_info.ip));
         s_retry_num = 0;
+        s_wifi_connected = true;
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
     }
 }
@@ -112,4 +116,9 @@ esp_err_t wifi_init_sta(void)
 
     ESP_LOGE(TAG, "Failed to connect to Wi-Fi SSID \"%s\"", CONFIG_HUE_WIFI_SSID);
     return ESP_ERR_TIMEOUT;
+}
+
+bool wifi_is_connected(void)
+{
+    return s_wifi_connected;
 }

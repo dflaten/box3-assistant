@@ -3,6 +3,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
 #include "cJSON.h"
 
 #include "esp_check.h"
@@ -10,10 +13,14 @@
 #include "esp_err.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 
+#include "system/wifi_support.h"
 #include "weather/weather_client.h"
 
 #define WEATHER_HTTP_TRACE_BODY_SIZE 4096
+#define WEATHER_MAX_CONNECT_ATTEMPTS 3
+#define WEATHER_RETRY_DELAY_MS 250
 
 typedef struct {
     char *body;
@@ -22,6 +29,11 @@ typedef struct {
 } weather_http_trace_t;
 
 static const char *TAG = "weather";
+
+static bool weather_should_retry(esp_err_t err)
+{
+    return err == ESP_ERR_HTTP_CONNECT;
+}
 
 /**
  * @brief Collect HTTP response body bytes for weather requests.
@@ -243,6 +255,11 @@ static esp_err_t weather_client_fetch_forecast(weather_forecast_day_t day, weath
 
     *out_report = (weather_report_t){ 0 };
 
+    if (!wifi_is_connected()) {
+        ESP_LOGW(TAG, "Skipping weather fetch for day=%d because Wi-Fi is disconnected", (int)day);
+        return ESP_ERR_INVALID_STATE;
+    }
+
     double latitude = 0;
     double longitude = 0;
     ESP_RETURN_ON_ERROR(weather_parse_coordinate(CONFIG_WEATHER_LATITUDE, "latitude", &latitude), TAG, "Invalid weather latitude");
@@ -257,44 +274,75 @@ static esp_err_t weather_client_fetch_forecast(weather_forecast_day_t day, weath
              longitude,
              CONFIG_WEATHER_TIMEZONE);
 
+    ESP_LOGI(TAG, "Starting weather fetch day=%d for %s from %s", (int)day, CONFIG_WEATHER_LOCATION_NAME, url);
+
+    esp_err_t err = ESP_FAIL;
     weather_http_trace_t trace = { 0 };
-    ESP_RETURN_ON_ERROR(weather_http_trace_init(&trace), TAG, "Failed to allocate weather trace buffer");
+    cJSON *root = NULL;
+    for (int attempt = 1; attempt <= WEATHER_MAX_CONNECT_ATTEMPTS; ++attempt) {
+        ESP_RETURN_ON_ERROR(weather_http_trace_init(&trace), TAG, "Failed to allocate weather trace buffer");
 
-    esp_http_client_config_t config = {
-        .url = url,
-        .method = HTTP_METHOD_GET,
-        .timeout_ms = CONFIG_WEATHER_TIMEOUT_MS,
-        .event_handler = weather_http_event_handler,
-        .user_data = &trace,
-        .crt_bundle_attach = esp_crt_bundle_attach,
-    };
+        esp_http_client_config_t config = {
+            .url = url,
+            .method = HTTP_METHOD_GET,
+            .timeout_ms = CONFIG_WEATHER_TIMEOUT_MS,
+            .event_handler = weather_http_event_handler,
+            .user_data = &trace,
+            .crt_bundle_attach = esp_crt_bundle_attach,
+        };
 
-    ESP_LOGI(TAG, "Fetching weather for %s from %s", CONFIG_WEATHER_LOCATION_NAME, url);
+        esp_http_client_handle_t client = esp_http_client_init(&config);
+        if (client == NULL) {
+            weather_http_trace_deinit(&trace);
+            return ESP_FAIL;
+        }
 
-    esp_http_client_handle_t client = esp_http_client_init(&config);
-    if (client == NULL) {
-        weather_http_trace_deinit(&trace);
-        return ESP_FAIL;
-    }
+        int64_t request_start_us = esp_timer_get_time();
+        err = esp_http_client_perform(client);
+        int64_t request_elapsed_ms = (esp_timer_get_time() - request_start_us) / 1000;
+        int status = esp_http_client_get_status_code(client);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG,
+                     "Weather request attempt %d/%d failed after %lld ms: %s (status=%d)",
+                     attempt,
+                     WEATHER_MAX_CONNECT_ATTEMPTS,
+                     (long long)request_elapsed_ms,
+                     esp_err_to_name(err),
+                     status);
+            esp_http_client_cleanup(client);
+            weather_http_trace_deinit(&trace);
+            if (!weather_should_retry(err) || attempt == WEATHER_MAX_CONNECT_ATTEMPTS) {
+                return err;
+            }
+            vTaskDelay(pdMS_TO_TICKS(WEATHER_RETRY_DELAY_MS * attempt));
+            continue;
+        }
 
-    esp_err_t err = esp_http_client_perform(client);
-    int status = esp_http_client_get_status_code(client);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Weather request failed: %s (status=%d)", esp_err_to_name(err), status);
+        if (status < 200 || status >= 300) {
+            ESP_LOGE(TAG,
+                     "Weather request attempt %d/%d returned HTTP %d after %lld ms",
+                     attempt,
+                     WEATHER_MAX_CONNECT_ATTEMPTS,
+                     status,
+                     (long long)request_elapsed_ms);
+            esp_http_client_cleanup(client);
+            weather_http_trace_deinit(&trace);
+            return ESP_FAIL;
+        }
+
+        ESP_LOGI(TAG,
+                 "Weather request attempt %d/%d completed in %lld ms (status=%d, bytes=%d)",
+                 attempt,
+                 WEATHER_MAX_CONNECT_ATTEMPTS,
+                 (long long)request_elapsed_ms,
+                 status,
+                 trace.len);
+
+        root = cJSON_Parse(trace.body);
         esp_http_client_cleanup(client);
-        weather_http_trace_deinit(&trace);
-        return err;
+        break;
     }
 
-    if (status < 200 || status >= 300) {
-        ESP_LOGE(TAG, "Weather request returned HTTP %d", status);
-        esp_http_client_cleanup(client);
-        weather_http_trace_deinit(&trace);
-        return ESP_FAIL;
-    }
-
-    cJSON *root = cJSON_Parse(trace.body);
-    esp_http_client_cleanup(client);
     if (!cJSON_IsObject(root)) {
         cJSON_Delete(root);
         weather_http_trace_deinit(&trace);
