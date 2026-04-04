@@ -9,11 +9,9 @@
   <img alt="Tests" src="https://img.shields.io/badge/tests-host%20unit-16a34a" />
 </p>
 
-<img src="docs/images/box3.jpg" alt="ESP32-S3-BOX-3 device" width="220" align="right" />
+<img src="docs/images/box3.jpg" alt="ESP32-S3-BOX-3 device" width="170" align="right" />
 
 `box3-assistant` is an ESP32-S3-BOX-3 firmware project for a networked voice assistant terminal.
-
-<br />
 
 This firmware image boots directly on the BOX-3 and acts as a smart front end for home and media integrations.
 
