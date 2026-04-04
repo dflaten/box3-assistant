@@ -1,21 +1,57 @@
 # box3-assistant
 
+<p align="center">
+  <img src="docs/images/box3.jpg" alt="ESP32-S3-BOX-3 device" width="420" />
+</p>
+
+<p align="center">
+  <img alt="Platform" src="https://img.shields.io/badge/platform-ESP32--S3--BOX--3-0f766e" />
+  <img alt="Framework" src="https://img.shields.io/badge/framework-ESP--IDF-1d4ed8" />
+  <img alt="Language" src="https://img.shields.io/badge/language-C-334155" />
+  <img alt="Voice" src="https://img.shields.io/badge/voice-Hi%20ESP-f59e0b" />
+  <img alt="Integrations" src="https://img.shields.io/badge/integrations-Hue%20%2B%20Weather-7c3aed" />
+  <img alt="Tests" src="https://img.shields.io/badge/tests-host%20unit-16a34a" />
+</p>
+
 `box3-assistant` is an ESP32-S3-BOX-3 firmware project for a networked voice assistant terminal.
 
-This firmware image boots directly on the BOX-3 and acts as a smart front end for home and media integrations. 
+This firmware image boots directly on the BOX-3 and acts as a smart front end for home and media integrations.
+
+## Table Of Contents
+
+- [Overview](#overview)
+- [Status](#status)
+- [Architecture](#architecture)
+- [Design Docs](#design-docs)
+- [Wake Word And Commands](#wake-word-and-commands)
+- [Secrets](#secrets)
+- [Wi-Fi Credentials](#wi-fi-credentials)
+- [Weather Configuration](#weather-configuration)
+- [Tests](#tests)
+
+## Overview
+
+| Icon | Item | Details |
+| --- | --- | --- |
+| 🧠 | Device | ESP32-S3-BOX-3 |
+| 🛠 | Firmware stack | ESP-IDF |
+| 🎙 | Wake word | `Hi ESP` |
+| 💡 | Integrations | Philips Hue and Open-Meteo weather |
+| 🖥 | Output | On-device status and weather screens |
+| 🧪 | Validation | Host-side unit tests and firmware builds |
 
 ## Status
 
 The project currently includes:
 
-- ESP-IDF based firmware for the ESP32-S3-BOX-3
-- speech model loading and local command detection
-- Wi-Fi configuration hooks
-- Hue bridge control path
-- Open-Meteo weather commands for a configurable location
-- on-device weather display with multiline forecast details
-- persisted assistant diagnostics for timeout and reboot debugging
-- host-side unit tests for assistant state, command labeling, and weather formatting
+- ✅ ESP-IDF based firmware for the ESP32-S3-BOX-3
+- ✅ Speech model loading and local command detection
+- ✅ Wi-Fi configuration hooks
+- ✅ Hue bridge control path
+- ✅ Open-Meteo weather commands for a configurable location
+- ✅ On-device weather display with multiline forecast details
+- ✅ Persisted assistant diagnostics for timeout and reboot debugging
+- ✅ Host-side unit tests for assistant state, command labeling, and weather formatting
 
 Planned future work includes local spoken weather playback, broader assistant features, richer UI, ChatGPT-backed interactions, and Jellyfin/media support.
 
@@ -23,20 +59,22 @@ Planned future work includes local spoken weather playback, broader assistant fe
 
 The firmware is currently organized around a small set of runtime-oriented modules:
 
-- `main/box3_assistant.c` owns boot flow, task startup, and top-level assistant orchestration
-- `main/assistant_runtime.h` defines the shared in-memory `assistant_runtime_t` state passed through assistant helpers and tasks
-- `main/hue/hue_command_runtime.c` owns loading stored Hue groups, syncing groups from the bridge, and rebuilding the runtime speech command table
-- `main/assistant_command_text.c` formats user-facing labels for built-in and Hue-backed commands
-- `main/assistant_state.c` holds pure assistant state/timeout decision helpers used by the runtime
-- `main/assistant_diagnostics.c` persists lightweight reboot and command breadcrumbs for post-restart debugging
+| Module | Responsibility |
+| --- | --- |
+| `main/box3_assistant.c` | Boot flow, task startup, and top-level assistant orchestration |
+| `main/assistant_runtime.h` | Shared in-memory `assistant_runtime_t` state passed through assistant helpers and tasks |
+| `main/hue/hue_command_runtime.c` | Load stored Hue groups, sync groups from the bridge, and rebuild the runtime speech command table |
+| `main/assistant_command_text.c` | Format user-facing labels for built-in and Hue-backed commands |
+| `main/assistant_state.c` | Pure assistant state and timeout decision helpers |
+| `main/assistant_diagnostics.c` | Persist lightweight reboot and command breadcrumbs for post-restart debugging |
 
 ## Design Docs
 
 Current design notes in `docs/`:
 
-- Ask GPT Design
-- Jellyfin Option 1 Design
-- Local Weather TTS Design With Piper
+- 📄 Ask GPT Design
+- 📄 Jellyfin Option 1 Design
+- 📄 Local Weather TTS Design With Piper
 
 ## Wake Word And Commands
 
@@ -60,6 +98,16 @@ The current assistant interaction flow is:
 If a weather or Hue HTTP request stalls during execution, the firmware now attempts to cancel the active request first. If that recovery does not finish within a short grace window, the device falls back to a restart.
 
 On the next boot, the firmware logs the previous command diagnostics and briefly shows a short `Prev ...` message on screen when the prior run ended in a notable timeout or reboot during command handling.
+
+### Quick Reference
+
+| Icon | Area | Current behavior |
+| --- | --- | --- |
+| 🎙 | Wake word | `Hi ESP` |
+| 🔄 | Built-in commands | `update groups from hue`, `weather today`, `weather tomorrow` |
+| 💡 | Dynamic commands | `turn on <group>`, `turn off <group>` |
+| ⚠ | Timeout handling | Cancel active HTTP work first, then restart only if recovery stalls |
+| 🧾 | Weather failure text | `Weather network error`, `Weather timeout`, `Weather unavailable` |
 
 Current wake word:
 
@@ -120,6 +168,11 @@ Recommended options:
 
 Both `sdkconfig` and `sdkconfig.defaults.local` are ignored by git.
 
+| Icon | File | Purpose |
+| --- | --- | --- |
+| 🔒 | `sdkconfig.defaults.local` | Untracked local seed values for secrets and overrides |
+| ⚙ | `sdkconfig` | Generated effective build configuration |
+
 Important distinction:
 
 - `sdkconfig.defaults.local` is a local input file that seeds config values
@@ -167,6 +220,11 @@ You can set Wi-Fi credentials in either of these ways:
 
 1. `idf.py menuconfig`
 2. a local `sdkconfig.defaults.local` file
+
+| Option | Best for | Notes |
+| --- | --- | --- |
+| `idf.py menuconfig` | One-off local configuration | Writes values into generated `sdkconfig` |
+| `sdkconfig.defaults.local` | Repeatable local builds | Best for machine-specific secrets and overrides |
 
 For the local file workflow:
 
@@ -224,14 +282,16 @@ Config values available through `menuconfig`:
 - `CONFIG_WEATHER_TIMEZONE`
 - `CONFIG_WEATHER_TIMEOUT_MS`
 
-Defaults:
+### Tracked Project Defaults
 
-- base URL: `https://api.open-meteo.com`
-- location name: `New York City, NY`
-- latitude: `40.7128`
-- longitude: `-74.0060`
-- timezone: `America/New_York`
-- timeout: `8000` ms
+| Setting | Default |
+| --- | --- |
+| Base URL | `https://api.open-meteo.com` |
+| Location name | `New York City, NY` |
+| Latitude | `40.7128` |
+| Longitude | `-74.0060` |
+| Timezone | `America/New_York` |
+| Timeout | `8000` ms |
 
 For the untracked local-file workflow, add weather settings to `sdkconfig.defaults.local` alongside your Wi-Fi values:
 
