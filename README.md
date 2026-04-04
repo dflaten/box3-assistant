@@ -13,7 +13,9 @@
 
 `box3-assistant` is an ESP32-S3-BOX-3 firmware project for a networked voice assistant terminal.
 
-This firmware image boots directly on the BOX-3 and acts as a smart front end for home and media integrations.
+This firmware image boots directly on the BOX-3 and acts as a smart front end for home and media integrations. This is a basic device
+that is created to share as little data as possible with 3rd parties. As the device grows in features flags will be added to disable
+integrations such as ChatGPT so sharing stays limited.
 
 <br clear="right" />
 

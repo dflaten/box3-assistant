@@ -304,6 +304,8 @@ Suggested states:
 
 This feature will introduce new secrets and local endpoints.
 
+It should also introduce explicit integration feature flags, or an equivalent configuration mechanism, so each major assistant integration can be turned on or off without code changes.
+
 Expected local config:
 
 - local STT server base URL
@@ -317,10 +319,20 @@ These should follow the existing local-secret workflow:
 
 Potential new config keys:
 
+- `CONFIG_INTEGRATION_HUE_ENABLED`
+- `CONFIG_INTEGRATION_WEATHER_ENABLED`
+- `CONFIG_INTEGRATION_ASK_GPT_ENABLED`
 - `CONFIG_LOCAL_STT_BASE_URL`
 - `CONFIG_LOCAL_STT_TIMEOUT_MS`
 - `CONFIG_OPENAI_API_KEY`
 - `CONFIG_OPENAI_MODEL`
+
+Feature-flag requirement:
+
+- each major integration should have a clear config switch that can disable its command path and network behavior
+- disabled integrations should not register voice commands or appear as active features in the runtime command table
+- tracked defaults should remain safe and generic, while local overrides can selectively enable or disable integrations for a specific device
+- the mechanism does not need to be limited to simple booleans, but it should be straightforward to understand and operate through normal config workflows
 
 ## Failure Handling
 
