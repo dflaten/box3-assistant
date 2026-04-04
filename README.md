@@ -1,10 +1,6 @@
 # box3-assistant
 
 <p align="center">
-  <img src="docs/images/box3.jpg" alt="ESP32-S3-BOX-3 device" width="420" />
-</p>
-
-<p align="center">
   <img alt="Platform" src="https://img.shields.io/badge/platform-ESP32--S3--BOX--3-0f766e" />
   <img alt="Framework" src="https://img.shields.io/badge/framework-ESP--IDF-1d4ed8" />
   <img alt="Language" src="https://img.shields.io/badge/language-C-334155" />
