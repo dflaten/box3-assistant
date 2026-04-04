@@ -13,6 +13,8 @@
 
 `box3-assistant` is an ESP32-S3-BOX-3 firmware project for a networked voice assistant terminal.
 
+<br />
+
 This firmware image boots directly on the BOX-3 and acts as a smart front end for home and media integrations.
 
 <br clear="right" />
@@ -44,14 +46,14 @@ This firmware image boots directly on the BOX-3 and acts as a smart front end fo
 
 The project currently includes:
 
-- ✅ ESP-IDF based firmware for the ESP32-S3-BOX-3
-- ✅ Speech model loading and local command detection
-- ✅ Wi-Fi configuration hooks
-- ✅ Hue bridge control path
-- ✅ Open-Meteo weather commands for a configurable location
-- ✅ On-device weather display with multiline forecast details
-- ✅ Persisted assistant diagnostics for timeout and reboot debugging
-- ✅ Host-side unit tests for assistant state, command labeling, and weather formatting
+✅ ESP-IDF based firmware for the ESP32-S3-BOX-3  
+✅ Speech model loading and local command detection  
+✅ Wi-Fi configuration hooks  
+✅ Hue bridge control path  
+✅ Open-Meteo weather commands for a configurable location  
+✅ On-device weather display with multiline forecast details  
+✅ Persisted assistant diagnostics for timeout and reboot debugging  
+✅ Host-side unit tests for assistant state, command labeling, and weather formatting
 
 Planned future work includes local spoken weather playback, broader assistant features, richer UI, ChatGPT-backed interactions, and Jellyfin/media support.
 
@@ -72,9 +74,9 @@ The firmware is currently organized around a small set of runtime-oriented modul
 
 Current design notes in `docs/`:
 
-- 📄 Ask GPT Design
-- 📄 Jellyfin Option 1 Design
-- 📄 Local Weather TTS Design With Piper
+📄 Ask GPT Design  
+📄 Jellyfin Option 1 Design  
+📄 Local Weather TTS Design With Piper
 
 ## Wake Word And Commands
 
