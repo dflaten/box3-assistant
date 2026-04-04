@@ -4,6 +4,7 @@ idf_component_register(
         "commands/assistant_command_text.c"
         "board/board_audio.c"
         "board/ui_status.c"
+        "assistant_diagnostics.c"
         "assistant_state.c"
         "box3_assistant.c"
         "hue/hue_command_map.c"

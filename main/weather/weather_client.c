@@ -15,6 +15,8 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 
+#include "assistant_diagnostics.h"
+#include "assistant_runtime.h"
 #include "system/wifi_support.h"
 #include "weather/weather_client.h"
 
@@ -29,6 +31,7 @@ typedef struct {
 } weather_http_trace_t;
 
 static const char *TAG = "weather";
+static esp_http_client_handle_t s_active_client;
 
 static bool weather_should_retry(esp_err_t err)
 {
@@ -275,6 +278,7 @@ static esp_err_t weather_client_fetch_forecast(weather_forecast_day_t day, weath
              CONFIG_WEATHER_TIMEZONE);
 
     ESP_LOGI(TAG, "Starting weather fetch day=%d for %s from %s", (int)day, CONFIG_WEATHER_LOCATION_NAME, url);
+    assistant_diag_update_detail(ASSISTANT_STAGE_EXECUTING, ASSISTANT_DIAG_DETAIL_WEATHER_START, day, 0, ESP_OK);
 
     esp_err_t err = ESP_FAIL;
     weather_http_trace_t trace = { 0 };
@@ -297,11 +301,19 @@ static esp_err_t weather_client_fetch_forecast(weather_forecast_day_t day, weath
             return ESP_FAIL;
         }
 
+        s_active_client = client;
+        assistant_diag_update_detail(ASSISTANT_STAGE_EXECUTING, ASSISTANT_DIAG_DETAIL_WEATHER_ATTEMPT, day, (uint32_t)attempt, ESP_OK);
+
         int64_t request_start_us = esp_timer_get_time();
         err = esp_http_client_perform(client);
         int64_t request_elapsed_ms = (esp_timer_get_time() - request_start_us) / 1000;
         int status = esp_http_client_get_status_code(client);
         if (err != ESP_OK) {
+            assistant_diag_update_detail(ASSISTANT_STAGE_EXECUTING,
+                                         ASSISTANT_DIAG_DETAIL_WEATHER_ATTEMPT,
+                                         day,
+                                         (uint32_t)attempt,
+                                         err);
             ESP_LOGE(TAG,
                      "Weather request attempt %d/%d failed after %lld ms: %s (status=%d)",
                      attempt,
@@ -310,6 +322,7 @@ static esp_err_t weather_client_fetch_forecast(weather_forecast_day_t day, weath
                      esp_err_to_name(err),
                      status);
             esp_http_client_cleanup(client);
+            s_active_client = NULL;
             weather_http_trace_deinit(&trace);
             if (!weather_should_retry(err) || attempt == WEATHER_MAX_CONNECT_ATTEMPTS) {
                 return err;
@@ -319,6 +332,11 @@ static esp_err_t weather_client_fetch_forecast(weather_forecast_day_t day, weath
         }
 
         if (status < 200 || status >= 300) {
+            assistant_diag_update_detail(ASSISTANT_STAGE_EXECUTING,
+                                         ASSISTANT_DIAG_DETAIL_WEATHER_ATTEMPT,
+                                         day,
+                                         (uint32_t)attempt,
+                                         ESP_FAIL);
             ESP_LOGE(TAG,
                      "Weather request attempt %d/%d returned HTTP %d after %lld ms",
                      attempt,
@@ -326,6 +344,7 @@ static esp_err_t weather_client_fetch_forecast(weather_forecast_day_t day, weath
                      status,
                      (long long)request_elapsed_ms);
             esp_http_client_cleanup(client);
+            s_active_client = NULL;
             weather_http_trace_deinit(&trace);
             return ESP_FAIL;
         }
@@ -338,8 +357,10 @@ static esp_err_t weather_client_fetch_forecast(weather_forecast_day_t day, weath
                  status,
                  trace.len);
 
+        assistant_diag_update_detail(ASSISTANT_STAGE_EXECUTING, ASSISTANT_DIAG_DETAIL_WEATHER_PARSE, day, (uint32_t)attempt, ESP_OK);
         root = cJSON_Parse(trace.body);
         esp_http_client_cleanup(client);
+        s_active_client = NULL;
         break;
     }
 
@@ -422,6 +443,7 @@ static esp_err_t weather_client_fetch_forecast(weather_forecast_day_t day, weath
              out_report->wind_speed_mph,
              out_report->summary);
 
+    assistant_diag_update_detail(ASSISTANT_STAGE_EXECUTING, ASSISTANT_DIAG_DETAIL_WEATHER_DONE, day, 0, ESP_OK);
     cJSON_Delete(root);
     weather_http_trace_deinit(&trace);
     return ESP_OK;
@@ -445,4 +467,15 @@ esp_err_t weather_client_fetch_today(weather_report_t *out_report)
 esp_err_t weather_client_fetch_tomorrow(weather_report_t *out_report)
 {
     return weather_client_fetch_forecast(WEATHER_FORECAST_TOMORROW, out_report);
+}
+
+esp_err_t weather_client_cancel_active_request(void)
+{
+    esp_http_client_handle_t client = s_active_client;
+    if (client == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    ESP_LOGW(TAG, "Cancelling active weather request");
+    return esp_http_client_cancel_request(client);
 }

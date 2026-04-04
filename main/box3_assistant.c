@@ -26,6 +26,7 @@
 #include "commands/assistant_command_text.h"
 #include "commands/assistant_command_dispatch.h"
 #include "commands/assistant_commands.h"
+#include "assistant_diagnostics.h"
 #include "assistant_state.h"
 #include "assistant_runtime.h"
 #include "board/board_audio.h"
@@ -44,6 +45,7 @@
 #define ASSISTANT_SESSION_TIMEOUT_MS 30000
 #define ASSISTANT_LISTENING_STALL_TIMEOUT_MS 12000
 #define ASSISTANT_WATCHDOG_POLL_MS 1000
+#define ASSISTANT_EXECUTION_CANCEL_GRACE_MS 5000
 
 static const char *TAG = "hue-voice";
 static const char *WAKE_WORD = "Hi ESP";
@@ -130,6 +132,9 @@ static void clear_active_session(assistant_runtime_t *rt)
     rt->assistant_awake = false;
     rt->assistant_awake_tick = 0;
     rt->speech_progress_tick = xTaskGetTickCount();
+    rt->current_command_id = 0;
+    rt->execution_timeout_pending = false;
+    rt->execution_timeout_tick = 0;
 }
 
 /**
@@ -167,6 +172,32 @@ static void assistant_session_timeout_task(void *arg)
                                         rt->assistant_awake_tick != 0,
                                         elapsed_ms,
                                         ASSISTANT_SESSION_TIMEOUT_MS)) {
+            if (rt->assistant_stage == ASSISTANT_STAGE_EXECUTING) {
+                if (!rt->execution_timeout_pending) {
+                    rt->execution_timeout_pending = true;
+                    rt->execution_timeout_tick = now;
+                    rt->speech_progress_tick = now;
+                    assistant_diag_mark_timeout(rt->assistant_stage);
+                    esp_err_t cancel_err = weather_client_cancel_active_request();
+                    if (cancel_err == ESP_ERR_INVALID_STATE) {
+                        cancel_err = hue_client_cancel_active_request();
+                    }
+                    ESP_LOGE(TAG,
+                             "Assistant execution exceeded %d ms for command_id=%d; cancel result=%s",
+                             ASSISTANT_SESSION_TIMEOUT_MS,
+                             rt->current_command_id,
+                             esp_err_to_name(cancel_err));
+                    continue;
+                }
+
+                if (pdTICKS_TO_MS(now - rt->execution_timeout_tick) < ASSISTANT_EXECUTION_CANCEL_GRACE_MS) {
+                    continue;
+                }
+
+                ESP_LOGE(TAG,
+                         "Assistant execution timeout recovery did not finish within %d ms; restarting",
+                         ASSISTANT_EXECUTION_CANCEL_GRACE_MS);
+            }
             ESP_LOGE(TAG,
                      "Assistant session exceeded %d ms in %s; restarting",
                      ASSISTANT_SESSION_TIMEOUT_MS,
@@ -365,6 +396,7 @@ static void speech_detect_task(void *arg)
                 rt->assistant_awake_tick = wake_tick;
                 rt->speech_progress_tick = wake_tick;
                 rt->assistant_stage = ASSISTANT_STAGE_LISTENING;
+                assistant_diag_capture_wake();
                 rt->multinet->clean(rt->model_data);
                 rt->afe_handle->disable_wakenet(rt->afe_data);
                 ESP_LOGI(TAG, "Wake word detected: %s", WAKE_WORD);
@@ -446,7 +478,11 @@ static void speech_detect_task(void *arg)
         TickType_t execute_start_tick = xTaskGetTickCount();
         rt->assistant_awake_tick = execute_start_tick;
         rt->speech_progress_tick = execute_start_tick;
+        rt->current_command_id = command_id;
+        rt->execution_timeout_pending = false;
+        rt->execution_timeout_tick = 0;
         ui_status_set(UI_STATUS_WORKING, command_text);
+        assistant_diag_start_command(command_id, rt->assistant_stage);
         ESP_LOGI(TAG, "Starting command execution for id=%d label=\"%s\"", command_id, command_text);
 
         esp_err_t action_err = ESP_FAIL;
@@ -485,6 +521,18 @@ static void speech_detect_task(void *arg)
             }
         }
 
+        if (rt->execution_timeout_pending) {
+            action_err = ESP_ERR_TIMEOUT;
+            hold_time = STATUS_HOLD_TIME;
+            snprintf(action_detail,
+                     sizeof(action_detail),
+                     "%s timeout",
+                     (dispatch.type == ASSISTANT_COMMAND_ACTION_WEATHER_TODAY ||
+                      dispatch.type == ASSISTANT_COMMAND_ACTION_WEATHER_TOMORROW)
+                         ? "Weather"
+                         : "Command");
+        }
+
         if (action_err == ESP_OK) {
             ui_status_set(UI_STATUS_SUCCESS, action_detail[0] != '\0' ? action_detail : command_text);
         } else {
@@ -497,6 +545,7 @@ static void speech_detect_task(void *arg)
                  action_err == ESP_OK ? "ok" : esp_err_to_name(action_err),
                  (unsigned long)pdTICKS_TO_MS(xTaskGetTickCount() - execute_start_tick));
 
+        assistant_diag_finish_command(action_err);
         clear_active_session(rt);
         vTaskDelay(hold_time);
         return_to_standby(rt);
@@ -523,7 +572,14 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(err);
 
+    ESP_ERROR_CHECK(assistant_diag_init());
     ESP_ERROR_CHECK(ui_status_init());
+    assistant_diag_log_previous_issue();
+    char boot_diag[48];
+    if (assistant_diag_format_previous_issue(boot_diag, sizeof(boot_diag))) {
+        ui_status_set(UI_STATUS_ERROR, boot_diag);
+        vTaskDelay(pdMS_TO_TICKS(2500));
+    }
     ui_status_set(UI_STATUS_BOOTING, NULL);
 
     ESP_ERROR_CHECK(hue_group_store_init());

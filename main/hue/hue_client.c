@@ -11,6 +11,8 @@
 #include "esp_http_client.h"
 #include "esp_log.h"
 
+#include "assistant_diagnostics.h"
+#include "assistant_runtime.h"
 #include "hue/hue_client.h"
 
 #define HUE_HTTP_TRACE_BODY_SIZE 2048
@@ -22,6 +24,7 @@ typedef struct {
 } hue_http_trace_t;
 
 static const char *TAG = "hue-voice";
+static esp_http_client_handle_t s_active_client;
 
 /**
  * @brief Collect HTTP response body bytes for Hue requests.
@@ -163,6 +166,8 @@ static esp_err_t hue_http_perform(const char *url,
     if (client == NULL) {
         return ESP_FAIL;
     }
+    s_active_client = client;
+    assistant_diag_update_detail(ASSISTANT_STAGE_EXECUTING, ASSISTANT_DIAG_DETAIL_HUE_REQUEST, -1, 0, ESP_OK);
 
     if (body != NULL) {
         esp_http_client_set_header(client, "Content-Type", "application/json");
@@ -188,6 +193,7 @@ static esp_err_t hue_http_perform(const char *url,
             ESP_LOGI(TAG, "Hue response body: %s", trace->body);
         }
         esp_http_client_cleanup(client);
+        s_active_client = NULL;
         return ESP_OK;
     }
 
@@ -204,6 +210,7 @@ static esp_err_t hue_http_perform(const char *url,
             ESP_LOGW(TAG, "Hue response body: %s", trace->body);
         }
         esp_http_client_cleanup(client);
+        s_active_client = NULL;
         return ESP_OK;
     }
 
@@ -218,6 +225,7 @@ static esp_err_t hue_http_perform(const char *url,
     }
 
     esp_http_client_cleanup(client);
+    s_active_client = NULL;
     return err;
 }
 
@@ -377,4 +385,15 @@ esp_err_t hue_client_sync_groups(hue_group_t *groups, size_t max_groups, size_t 
     *out_count = kept;
     ESP_LOGI(TAG, "Accepted %u usable Hue group(s) for runtime commands", (unsigned)kept);
     return ESP_OK;
+}
+
+esp_err_t hue_client_cancel_active_request(void)
+{
+    esp_http_client_handle_t client = s_active_client;
+    if (client == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    ESP_LOGW(TAG, "Cancelling active Hue request");
+    return esp_http_client_cancel_request(client);
 }

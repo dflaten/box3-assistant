@@ -40,6 +40,12 @@ typedef struct {
     volatile TickType_t speech_progress_tick;
     /** High-level stage used for watchdog diagnostics. */
     volatile assistant_stage_t assistant_stage;
+    /** Most recent command id being executed, or 0 when idle. */
+    volatile int current_command_id;
+    /** True after the watchdog has requested timeout recovery for the active execution. */
+    volatile bool execution_timeout_pending;
+    /** Tick count captured when timeout recovery was first requested. */
+    volatile TickType_t execution_timeout_tick;
     /** MultiNet interface selected from the ESP-SR model bundle. */
     esp_mn_iface_t *multinet;
     /** Opaque model instance owned by the selected MultiNet interface. */

@@ -9,3 +9,4 @@
 
 esp_err_t hue_client_set_group_by_id(const char *group_id, bool on);
 esp_err_t hue_client_sync_groups(hue_group_t *groups, size_t max_groups, size_t *out_count);
+esp_err_t hue_client_cancel_active_request(void);
