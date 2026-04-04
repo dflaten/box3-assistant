@@ -15,6 +15,7 @@ The project currently includes:
 - Hue bridge control path
 - Open-Meteo weather commands for a configurable location
 - on-device weather display with multiline forecast details
+- persisted assistant diagnostics for timeout and reboot debugging
 - host-side unit tests for assistant state, command labeling, and weather formatting
 
 Planned future work includes local spoken weather playback, broader assistant features, richer UI, ChatGPT-backed interactions, and Jellyfin/media support.
@@ -28,6 +29,7 @@ The firmware is currently organized around a small set of runtime-oriented modul
 - `main/hue/hue_command_runtime.c` owns loading stored Hue groups, syncing groups from the bridge, and rebuilding the runtime speech command table
 - `main/assistant_command_text.c` formats user-facing labels for built-in and Hue-backed commands
 - `main/assistant_state.c` holds pure assistant state/timeout decision helpers used by the runtime
+- `main/assistant_diagnostics.c` persists lightweight reboot and command breadcrumbs for post-restart debugging
 
 ## Design Docs
 
@@ -56,6 +58,10 @@ The current assistant interaction flow is:
 4. show the result on screen
 5. return to standby
 
+If a weather or Hue HTTP request stalls during execution, the firmware now attempts to cancel the active request first. If that recovery does not finish within a short grace window, the device falls back to a restart.
+
+On the next boot, the firmware logs the previous command diagnostics and briefly shows a short `Prev ...` message on screen when the prior run ended in a notable timeout or reboot during command handling.
+
 Current wake word:
 
 - `Hi ESP`
@@ -83,6 +89,8 @@ Saying `weather today` or `weather tomorrow` causes the firmware to:
 2. display a multiline weather summary on the BOX-3 screen
 3. hold that weather screen for 15 seconds
 4. return to standby
+
+Transient connection failures are retried automatically. Weather network failures show `Weather network error`, and execution-time cancellation recovery shows `Weather timeout`.
 
 The current weather display format is:
 
@@ -235,6 +243,11 @@ CONFIG_WEATHER_LONGITUDE="-74.0060"
 CONFIG_WEATHER_TIMEZONE="America/New_York"
 ```
 
+For this repo, the intended setup is:
+
+- tracked project default: `New York City, NY`
+- local machine override example: edit your untracked `sdkconfig.defaults.local` to whatever location you actually want, such as `Fargo, ND`
+
 The firmware also enables the ESP certificate bundle in tracked defaults so HTTPS weather requests can validate the remote certificate.
 
 Note: the firmware uses Espressif's built-in `Hi, ESP` WakeNet model (`wn9s_hiesp`) for this wake-word flow. Say `Hi ESP` when testing the current firmware.
@@ -248,6 +261,8 @@ Host-side unit tests cover assistant state-machine decisions, command-label form
 - empty MultiNet result recovery
 - assistant session timeout recovery
 - built-in and Hue command label formatting
+
+The host test target does not currently exercise the ESP-IDF HTTP stack, persisted diagnostics module, or request-cancellation path.
 
 Run them with:
 

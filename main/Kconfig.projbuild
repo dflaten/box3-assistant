@@ -36,19 +36,19 @@ config WEATHER_BASE_URL
 
 config WEATHER_LOCATION_NAME
     string "Weather location name"
-    default "Fargo, ND"
+    default "New York City, NY"
 
 config WEATHER_LATITUDE
     string "Weather latitude"
-    default "46.8772"
+    default "40.7128"
 
 config WEATHER_LONGITUDE
     string "Weather longitude"
-    default "-96.7898"
+    default "-74.0060"
 
 config WEATHER_TIMEZONE
     string "Weather timezone"
-    default "America/Chicago"
+    default "America/New_York"
 
 config WEATHER_TIMEOUT_MS
     int "Weather request timeout in ms"
