@@ -15,6 +15,8 @@
 
 This firmware image boots directly on the BOX-3 and acts as a smart front end for home and media integrations.
 
+<br clear="right" />
+
 ## Table Of Contents
 
 - [Overview](#overview)
