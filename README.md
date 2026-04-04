@@ -9,7 +9,6 @@ This firmware image boots directly on the BOX-3 and acts as a smart front end fo
 The project currently includes:
 
 - ESP-IDF based firmware for the ESP32-S3-BOX-3
-- BOX-3 board support integration
 - speech model loading and local command detection
 - Wi-Fi configuration hooks
 - Hue bridge control path
