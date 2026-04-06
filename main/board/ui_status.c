@@ -46,7 +46,9 @@ typedef struct {
 static const glyph_t s_font[] = {
     {' ', {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}},
     {'!', {0x04, 0x04, 0x04, 0x04, 0x04, 0x00, 0x04}},
+    {',', {0x00, 0x00, 0x00, 0x00, 0x04, 0x04, 0x08}},
     {'%', {0x19, 0x19, 0x02, 0x04, 0x08, 0x13, 0x13}},
+    {':', {0x00, 0x04, 0x00, 0x00, 0x00, 0x04, 0x00}},
     {'/', {0x01, 0x02, 0x02, 0x04, 0x08, 0x08, 0x10}},
     {'-', {0x00, 0x00, 0x00, 0x1F, 0x00, 0x00, 0x00}},
     {'.', {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04}},
@@ -114,6 +116,8 @@ static uint16_t state_bg(ui_status_state_t state)
         return rgb565(34, 94, 168);
     case UI_STATUS_READY:
         return rgb565(45, 55, 72);
+    case UI_STATUS_CLOCK:
+        return rgb565(15, 23, 42);
     case UI_STATUS_LISTENING:
         return rgb565(194, 120, 3);
     case UI_STATUS_WORKING:
@@ -140,6 +144,8 @@ static const char *state_title(ui_status_state_t state)
         return "CONNECTING";
     case UI_STATUS_READY:
         return "READY";
+    case UI_STATUS_CLOCK:
+        return "";
     case UI_STATUS_LISTENING:
         return "LISTENING";
     case UI_STATUS_WORKING:
@@ -166,6 +172,8 @@ static const char *state_subtitle(ui_status_state_t state)
         return "JOINING WI-FI";
     case UI_STATUS_READY:
         return "SAY HI ESP";
+    case UI_STATUS_CLOCK:
+        return "";
     case UI_STATUS_LISTENING:
         return "SAY A COMMAND";
     case UI_STATUS_WORKING:
@@ -422,6 +430,28 @@ static void render_status(ui_status_state_t state, const char *detail)
 }
 
 /**
+ * @brief Render a dedicated idle clock screen for presence-triggered wakeups.
+ * @param time_text Current local time or a short sync-status message.
+ * @param date_text Current local date or a short secondary status message.
+ * @param location_text Weather/location label shown at the bottom of the screen.
+ * @return This function does not return a value.
+ */
+static void render_clock(const char *time_text, const char *date_text, const char *location_text)
+{
+    const uint16_t bg = state_bg(UI_STATUS_CLOCK);
+    const uint16_t fg = rgb565(255, 255, 255);
+    const uint16_t muted = rgb565(191, 219, 254);
+
+    fill_rect(0, 0, UI_SCREEN_WIDTH, UI_SCREEN_HEIGHT, bg);
+    draw_text_centered(24, UI_BODY_SCALE, muted, "LOCAL TIME");
+    draw_text_centered(72, UI_TITLE_SCALE, fg, time_text != NULL ? time_text : "");
+    draw_text_centered(136, UI_BODY_SCALE, fg, date_text != NULL ? date_text : "");
+    if (location_text != NULL && location_text[0] != '\0') {
+        draw_text_block_centered(182, UI_BODY_SCALE, muted, location_text);
+    }
+}
+
+/**
  * @brief Power down the display after extended idle time in the ready state.
  * @param arg Unused FreeRTOS task parameter.
  * @return This task does not return.
@@ -523,4 +553,49 @@ void ui_status_set(ui_status_state_t state, const char *detail)
     render_status(state, detail);
 
     xSemaphoreGive(s_ui_mutex);
+}
+
+/**
+ * @brief Render the idle clock screen and wake the display if needed.
+ * @param time_text Current local time or a short sync-status message.
+ * @param date_text Current local date or a short secondary status message.
+ * @param location_text Weather/location label shown under the time.
+ * @return This function does not return a value.
+ * @note Clock updates intentionally do not reset the generic ready-screen idle timer.
+ */
+void ui_status_show_clock(const char *time_text, const char *date_text, const char *location_text)
+{
+    if (!s_ready || s_ui_mutex == NULL) {
+        return;
+    }
+
+    if (xSemaphoreTake(s_ui_mutex, portMAX_DELAY) != pdTRUE) {
+        return;
+    }
+
+    s_current_state = UI_STATUS_CLOCK;
+    display_power_set(true);
+    render_clock(time_text, date_text, location_text);
+
+    xSemaphoreGive(s_ui_mutex);
+}
+
+/**
+ * @brief Explicitly turn the LCD display and backlight on or off.
+ * @param on True to enable the display, false to disable it.
+ * @return ESP_OK on success, or an ESP error code if the display transition fails.
+ */
+esp_err_t ui_status_display_set(bool on)
+{
+    if (!s_ready || s_ui_mutex == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (xSemaphoreTake(s_ui_mutex, portMAX_DELAY) != pdTRUE) {
+        return ESP_ERR_TIMEOUT;
+    }
+
+    esp_err_t err = display_power_set(on);
+    xSemaphoreGive(s_ui_mutex);
+    return err;
 }

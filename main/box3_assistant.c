@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "nvs_flash.h"
@@ -17,11 +18,11 @@
 #include "esp_log.h"
 #include "esp_mn_iface.h"
 #include "esp_mn_models.h"
-#include "esp_mn_speech_commands.h"
 #include "esp_system.h"
 #include "esp_wn_models.h"
 #include "esp_codec_dev.h"
-#include "flite_g2p.h"
+
+#include "bsp/esp-box-3.h"
 
 #include "commands/assistant_command_text.h"
 #include "commands/assistant_command_dispatch.h"
@@ -35,6 +36,7 @@
 #include "hue/hue_client.h"
 #include "hue/hue_group_store.h"
 #include "board/ui_status.h"
+#include "system/time_support.h"
 #include "system/wifi_support.h"
 #include "weather/weather_client.h"
 
@@ -46,6 +48,11 @@
 #define ASSISTANT_LISTENING_STALL_TIMEOUT_MS 12000
 #define ASSISTANT_WATCHDOG_POLL_MS 1000
 #define ASSISTANT_EXECUTION_CANCEL_GRACE_MS 5000
+#define PRESENCE_TIMEOUT_MS 30000
+#define PRESENCE_POLL_MS 250
+#define PRESENCE_TASK_STACK 4096
+#define PRESENCE_TASK_PRIORITY 3
+#define PRESENCE_GPIO BSP_PMOD1_IO5
 
 static const char *TAG = "hue-voice";
 static const char *WAKE_WORD = "Hi ESP";
@@ -55,6 +62,8 @@ static const TickType_t WEATHER_STATUS_HOLD_TIME = pdMS_TO_TICKS(WEATHER_STATUS_
 static void audio_feed_set_paused(assistant_runtime_t *rt, bool paused);
 static void show_status_then_return_to_standby(assistant_runtime_t *rt, ui_status_state_t state, const char *detail, TickType_t hold_time);
 static void clear_active_session(assistant_runtime_t *rt);
+static esp_err_t init_presence_sensor(void);
+static void presence_clock_task(void *arg);
 
 static const char *assistant_stage_name(assistant_stage_t stage)
 {
@@ -135,6 +144,99 @@ static void clear_active_session(assistant_runtime_t *rt)
     rt->current_command_id = 0;
     rt->execution_timeout_pending = false;
     rt->execution_timeout_tick = 0;
+}
+
+/**
+ * @brief Configure the dock motion output pin used for presence-triggered clock wakeups.
+ * @return ESP_OK on success, or an ESP error code if GPIO setup fails.
+ */
+static esp_err_t init_presence_sensor(void)
+{
+    const gpio_config_t io_config = {
+        .pin_bit_mask = 1ULL << PRESENCE_GPIO,
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+
+    ESP_RETURN_ON_ERROR(gpio_config(&io_config), TAG, "Failed to configure presence GPIO");
+    ESP_LOGI(TAG, "Presence monitor using GPIO %d", PRESENCE_GPIO);
+    return ESP_OK;
+}
+
+/**
+ * @brief Show a presence-triggered clock screen while the assistant is idle.
+ * @param arg Pointer to the shared assistant runtime state.
+ * @return This task does not return.
+ * @note The motion sensor output is treated as active-high and only affects the screen during standby.
+ */
+static void presence_clock_task(void *arg)
+{
+    assistant_runtime_t *rt = (assistant_runtime_t *)arg;
+    TickType_t last_motion_tick = 0;
+    bool display_owned_by_presence = false;
+    bool last_clock_synced = false;
+
+    char time_text[24];
+    char date_text[32];
+    char last_time_text[24] = { 0 };
+    char last_date_text[32] = { 0 };
+
+    while (true) {
+        vTaskDelay(pdMS_TO_TICKS(PRESENCE_POLL_MS));
+
+        const TickType_t now = xTaskGetTickCount();
+        const bool motion_detected = gpio_get_level(PRESENCE_GPIO) > 0;
+        const bool assistant_idle = !rt->assistant_awake && rt->assistant_stage == ASSISTANT_STAGE_STANDBY;
+
+        if (motion_detected) {
+            last_motion_tick = now;
+        }
+
+        if (!assistant_idle) {
+            display_owned_by_presence = false;
+            continue;
+        }
+
+        const bool motion_recent =
+            last_motion_tick != 0 && (now - last_motion_tick) < pdMS_TO_TICKS(PRESENCE_TIMEOUT_MS);
+
+        if (!motion_recent) {
+            if (display_owned_by_presence) {
+                ESP_LOGI(TAG, "No motion for %d ms; turning clock display off", PRESENCE_TIMEOUT_MS);
+                ui_status_display_set(false);
+                display_owned_by_presence = false;
+                last_clock_synced = false;
+                last_time_text[0] = '\0';
+                last_date_text[0] = '\0';
+            }
+            continue;
+        }
+
+        bool clock_synced = time_support_format_now(time_text, sizeof(time_text), date_text, sizeof(date_text));
+        bool should_redraw = !display_owned_by_presence || clock_synced != last_clock_synced;
+
+        if (clock_synced) {
+            should_redraw = should_redraw ||
+                            strcmp(time_text, last_time_text) != 0 ||
+                            strcmp(date_text, last_date_text) != 0;
+        }
+
+        if (should_redraw) {
+            if (clock_synced) {
+                ui_status_show_clock(time_text, date_text, CONFIG_ASSISTANT_LOCATION_NAME);
+                strlcpy(last_time_text, time_text, sizeof(last_time_text));
+                strlcpy(last_date_text, date_text, sizeof(last_date_text));
+            } else {
+                ui_status_show_clock("SYNCING TIME", "WAITING FOR NTP", CONFIG_ASSISTANT_LOCATION_NAME);
+                last_time_text[0] = '\0';
+                last_date_text[0] = '\0';
+            }
+            display_owned_by_presence = true;
+            last_clock_synced = clock_synced;
+        }
+    }
 }
 
 /**
@@ -587,6 +689,10 @@ void app_main(void)
 
     ui_status_set(UI_STATUS_CONNECTING, NULL);
     ESP_ERROR_CHECK(wifi_init_sta());
+    esp_err_t time_err = time_support_init();
+    if (time_err != ESP_OK) {
+        ESP_LOGW(TAG, "Time sync initialization failed: %s", esp_err_to_name(time_err));
+    }
 
     ui_status_set(UI_STATUS_BOOTING, "Loading speech models");
     ESP_ERROR_CHECK(init_models(rt));
@@ -607,10 +713,12 @@ void app_main(void)
     }
 
     ESP_ERROR_CHECK(board_audio_init_microphone(&rt->mic_codec));
+    ESP_ERROR_CHECK(init_presence_sensor());
 
     ui_status_set(UI_STATUS_READY, NULL);
 
     xTaskCreatePinnedToCore(audio_feed_task, "audio_feed", 8192, rt, 6, NULL, 0);
     xTaskCreatePinnedToCore(speech_detect_task, "speech_detect", 12288, rt, 5, NULL, 1);
     xTaskCreate(assistant_session_timeout_task, "assistant_session_timeout", 4096, rt, 4, NULL);
+    xTaskCreate(presence_clock_task, "presence_clock", PRESENCE_TASK_STACK, rt, PRESENCE_TASK_PRIORITY, NULL);
 }

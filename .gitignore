@@ -1,5 +1,6 @@
 # ESP-IDF build outputs
 build/
+tests/build/
 sdkconfig
 sdkconfig.old
 dependencies.lock
@@ -35,6 +36,7 @@ credentials.*
 Thumbs.db
 .idea/
 .vscode/
+.codex
 *.swp
 *.swo
 

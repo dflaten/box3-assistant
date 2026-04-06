@@ -11,6 +11,7 @@ idf_component_register(
         "hue/hue_command_runtime.c"
         "hue/hue_client.c"
         "hue/hue_group_store.c"
+        "system/time_support.c"
         "system/wifi_support.c"
         "weather/weather_client.c"
         "weather/weather_format.c"

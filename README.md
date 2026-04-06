@@ -278,7 +278,7 @@ The weather command target is configurable through `menuconfig` or your local `s
 Config values available through `menuconfig`:
 
 - `CONFIG_WEATHER_BASE_URL`
-- `CONFIG_WEATHER_LOCATION_NAME`
+- `CONFIG_ASSISTANT_LOCATION_NAME`
 - `CONFIG_WEATHER_LATITUDE`
 - `CONFIG_WEATHER_LONGITUDE`
 - `CONFIG_WEATHER_TIMEZONE`
@@ -298,7 +298,7 @@ Config values available through `menuconfig`:
 For the untracked local-file workflow, add weather settings to `sdkconfig.defaults.local` alongside your Wi-Fi values:
 
 ```text
-CONFIG_WEATHER_LOCATION_NAME="New York City, NY"
+CONFIG_ASSISTANT_LOCATION_NAME="New York City, NY"
 CONFIG_WEATHER_LATITUDE="40.7128"
 CONFIG_WEATHER_LONGITUDE="-74.0060"
 CONFIG_WEATHER_TIMEZONE="America/New_York"

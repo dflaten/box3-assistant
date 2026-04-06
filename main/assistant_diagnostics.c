@@ -275,7 +275,11 @@ bool assistant_diag_format_previous_issue(char *buffer, size_t buffer_size)
     }
 
     const assistant_diag_record_t *record = &s_previous_record;
-    bool notable = record->timed_out || record->active || s_previous_reset_reason != ESP_RST_POWERON;
+    bool suspicious_reset = s_previous_reset_reason == ESP_RST_PANIC ||
+                            s_previous_reset_reason == ESP_RST_INT_WDT ||
+                            s_previous_reset_reason == ESP_RST_TASK_WDT ||
+                            s_previous_reset_reason == ESP_RST_WDT;
+    bool notable = record->timed_out || record->active || suspicious_reset;
     if (!notable) {
         return false;
     }

@@ -277,7 +277,7 @@ static esp_err_t weather_client_fetch_forecast(weather_forecast_day_t day, weath
              longitude,
              CONFIG_WEATHER_TIMEZONE);
 
-    ESP_LOGI(TAG, "Starting weather fetch day=%d for %s from %s", (int)day, CONFIG_WEATHER_LOCATION_NAME, url);
+    ESP_LOGI(TAG, "Starting weather fetch day=%d for %s from %s", (int)day, CONFIG_ASSISTANT_LOCATION_NAME, url);
     assistant_diag_update_detail(ASSISTANT_STAGE_EXECUTING, ASSISTANT_DIAG_DETAIL_WEATHER_START, day, 0, ESP_OK);
 
     esp_err_t err = ESP_FAIL;
@@ -419,7 +419,7 @@ static esp_err_t weather_client_fetch_forecast(weather_forecast_day_t day, weath
         return err;
     }
 
-    snprintf(out_report->location, sizeof(out_report->location), "%s", CONFIG_WEATHER_LOCATION_NAME);
+    snprintf(out_report->location, sizeof(out_report->location), "%s", CONFIG_ASSISTANT_LOCATION_NAME);
     out_report->has_current_conditions = day == WEATHER_FORECAST_TODAY;
     out_report->current_temp_f = (int)(current_temp >= 0 ? current_temp + 0.5 : current_temp - 0.5);
     out_report->max_temp_f = (int)(max_temp >= 0 ? max_temp + 0.5 : max_temp - 0.5);
@@ -433,7 +433,7 @@ static esp_err_t weather_client_fetch_forecast(weather_forecast_day_t day, weath
 
     ESP_LOGI(TAG,
              "%s weather day=%d date=%s now=%dF high=%dF low=%dF precip=%d%% wind=%dmph summary=%s",
-             CONFIG_WEATHER_LOCATION_NAME,
+             CONFIG_ASSISTANT_LOCATION_NAME,
              day_index,
              out_report->date,
              out_report->current_temp_f,

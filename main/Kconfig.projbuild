@@ -34,8 +34,8 @@ config WEATHER_BASE_URL
     string "Open-Meteo base URL"
     default "https://api.open-meteo.com"
 
-config WEATHER_LOCATION_NAME
-    string "Weather location name"
+config ASSISTANT_LOCATION_NAME
+    string "Assistant location name"
     default "New York City, NY"
 
 config WEATHER_LATITUDE
