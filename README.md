@@ -26,6 +26,7 @@ integrations such as ChatGPT so data sharing stays limited.
 - [Architecture](#architecture)
 - [Design Docs](#design-docs)
 - [Wake Word And Commands](#wake-word-and-commands)
+- [Development Setup](#development-setup)
 - [Secrets](#secrets)
 - [Wi-Fi Credentials](#wi-fi-credentials)
 - [Weather Configuration](#weather-configuration)
@@ -158,6 +159,64 @@ Current limits:
 - synced groups persist across power cycles, but you may need to resync after reflashing if the `storage` partition is erased or rewritten
 - weather location is configurable through local sdkconfig values
 - weather playback is screen-only for now; spoken playback is planned separately
+
+## Development Setup
+
+Recommended local tooling:
+
+- ESP-IDF activated through `fish` with `get_idf`
+- `clang-format` for C/C++ formatting
+- `make` for common repo tasks
+
+On Ubuntu, install `clang-format` with:
+
+```bash
+sudo apt update
+sudo apt install clang-format
+```
+
+Verify it is available:
+
+```bash
+clang-format --version
+```
+
+The repo includes a root [`.clang-format`](./.clang-format) for C/C++ formatting.
+
+If `clang-format` is installed locally, you can format a file with:
+
+```bash
+clang-format -i main/hue/hue_client.c
+```
+
+Or format multiple touched C/C++ files at once:
+
+```bash
+clang-format -i main/*.c main/**/*.c main/**/*.h tests/*.c
+```
+
+To format the whole repo using the checked-in file list, run:
+
+```bash
+./scripts/format.sh
+```
+
+The formatter binary is not bundled with this repo, so install it through your system package manager and use the checked-in config.
+
+Common repo tasks are also available through `make`:
+
+```bash
+make format
+make test
+make build
+make deploy
+```
+
+`make deploy` uses `/dev/ttyACM0` by default. Override the serial port with:
+
+```bash
+make deploy PORT=/dev/ttyUSB0
+```
 
 ## Secrets
 
