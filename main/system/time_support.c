@@ -19,8 +19,7 @@ static bool s_time_support_initialized;
  * @param timezone_name IANA-style timezone identifier from config.
  * @return A POSIX TZ string understood by tzset(), or the original input as fallback.
  */
-static const char *timezone_to_posix(const char *timezone_name)
-{
+static const char *timezone_to_posix(const char *timezone_name) {
     if (timezone_name == NULL || timezone_name[0] == '\0') {
         return "UTC0";
     }
@@ -47,8 +46,7 @@ static const char *timezone_to_posix(const char *timezone_name)
     return timezone_name;
 }
 
-esp_err_t time_support_init(void)
-{
+esp_err_t time_support_init(void) {
     if (s_time_support_initialized) {
         return ESP_OK;
     }
@@ -74,18 +72,13 @@ esp_err_t time_support_init(void)
     return ESP_OK;
 }
 
-bool time_support_is_synced(void)
-{
+bool time_support_is_synced(void) {
     time_t now = 0;
     time(&now);
     return now >= MIN_VALID_UNIX_TIME;
 }
 
-bool time_support_format_now(char *time_buffer,
-                             size_t time_buffer_size,
-                             char *date_buffer,
-                             size_t date_buffer_size)
-{
+bool time_support_format_now(char *time_buffer, size_t time_buffer_size, char *date_buffer, size_t date_buffer_size) {
     if (time_buffer == NULL || date_buffer == NULL || time_buffer_size == 0 || date_buffer_size == 0) {
         return false;
     }
@@ -98,7 +91,7 @@ bool time_support_format_now(char *time_buffer,
     }
 
     time_t now = 0;
-    struct tm local_time = { 0 };
+    struct tm local_time = {0};
     time(&now);
     localtime_r(&now, &local_time);
 

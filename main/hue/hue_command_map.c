@@ -7,9 +7,8 @@
  * @param on True for the "turn on" variant, false for the "turn off" variant.
  * @return The encoded runtime command ID for that group action.
  */
-int hue_group_command_id(int command_base, size_t index, bool on)
-{
-    return command_base + (int)(index * 2) + (on ? 0 : 1);
+int hue_group_command_id(int command_base, size_t index, bool on) {
+    return command_base + (int) (index * 2) + (on ? 0 : 1);
 }
 
 /**
@@ -21,18 +20,13 @@ int hue_group_command_id(int command_base, size_t index, bool on)
  * @param on Optional output for the decoded target power state.
  * @return True if the command ID maps to a valid Hue group action, otherwise false.
  */
-bool hue_decode_group_command_id(int command_id,
-                                 int command_base,
-                                 size_t group_count,
-                                 size_t *group_index,
-                                 bool *on)
-{
+bool hue_decode_group_command_id(int command_id, int command_base, size_t group_count, size_t *group_index, bool *on) {
     if (command_id < command_base) {
         return false;
     }
 
     int offset = command_id - command_base;
-    size_t index = (size_t)(offset / 2);
+    size_t index = (size_t) (offset / 2);
     if (index >= group_count) {
         return false;
     }

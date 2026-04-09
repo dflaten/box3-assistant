@@ -1,7 +1,7 @@
 #pragma once
 
-#define HUE_GROUP_ID_LEN 16
-#define HUE_GROUP_NAME_LEN 64
+#define HUE_GROUP_ID_LEN    16
+#define HUE_GROUP_NAME_LEN  64
 #define HUE_GROUP_MAX_COUNT 6
 
 typedef struct {

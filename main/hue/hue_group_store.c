@@ -21,8 +21,7 @@ static bool s_store_ready;
  * @brief Mount the group storage backend if it is not already ready.
  * @return ESP_OK on success, or an ESP error code if SPIFFS mount fails.
  */
-esp_err_t hue_group_store_init(void)
-{
+esp_err_t hue_group_store_init(void) {
     if (s_store_ready) {
         return ESP_OK;
     }
@@ -44,8 +43,7 @@ esp_err_t hue_group_store_init(void)
  * @param out_count Output for the number of loaded groups written.
  * @return ESP_OK on success, or an ESP error code if storage or parsing fails.
  */
-esp_err_t hue_group_store_load(hue_group_t *groups, size_t max_groups, size_t *out_count)
-{
+esp_err_t hue_group_store_load(hue_group_t *groups, size_t max_groups, size_t *out_count) {
     if (out_count == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -70,13 +68,13 @@ esp_err_t hue_group_store_load(hue_group_t *groups, size_t max_groups, size_t *o
     }
     rewind(file);
 
-    char *json = calloc((size_t)len + 1, 1);
+    char *json = calloc((size_t) len + 1, 1);
     if (json == NULL) {
         fclose(file);
         return ESP_ERR_NO_MEM;
     }
 
-    size_t read_len = fread(json, 1, (size_t)len, file);
+    size_t read_len = fread(json, 1, (size_t) len, file);
     fclose(file);
     json[read_len] = '\0';
 
@@ -111,7 +109,7 @@ esp_err_t hue_group_store_load(hue_group_t *groups, size_t max_groups, size_t *o
     cJSON_Delete(root);
 
     *out_count = count;
-    ESP_LOGI(TAG, "Loaded %u stored Hue group(s)", (unsigned)count);
+    ESP_LOGI(TAG, "Loaded %u stored Hue group(s)", (unsigned) count);
     return ESP_OK;
 }
 
@@ -121,8 +119,7 @@ esp_err_t hue_group_store_load(hue_group_t *groups, size_t max_groups, size_t *o
  * @param count The number of valid entries in the group array.
  * @return ESP_OK on success, or an ESP error code if serialization or writing fails.
  */
-esp_err_t hue_group_store_save(const hue_group_t *groups, size_t count)
-{
+esp_err_t hue_group_store_save(const hue_group_t *groups, size_t count) {
     ESP_RETURN_ON_ERROR(hue_group_store_init(), TAG, "Failed to initialize group storage");
 
     cJSON *root = cJSON_CreateArray();
@@ -163,6 +160,6 @@ esp_err_t hue_group_store_save(const hue_group_t *groups, size_t count)
         return ESP_FAIL;
     }
 
-    ESP_LOGI(TAG, "Saved %u Hue group(s) to storage", (unsigned)count);
+    ESP_LOGI(TAG, "Saved %u Hue group(s) to storage", (unsigned) count);
     return ESP_OK;
 }

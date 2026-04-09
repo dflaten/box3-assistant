@@ -9,8 +9,7 @@
  * @param buffer_size Size of the destination buffer in bytes.
  * @return This function does not return a value.
  */
-void weather_format_detail(const weather_report_t *report, char *buffer, size_t buffer_size)
-{
+void weather_format_detail(const weather_report_t *report, char *buffer, size_t buffer_size) {
     if (report == NULL || buffer == NULL || buffer_size == 0) {
         return;
     }

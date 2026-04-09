@@ -2,10 +2,10 @@
 
 #include <stdbool.h>
 
-#define WEATHER_SUMMARY_LEN 24
-#define WEATHER_BRIEF_TEXT_LEN 64
-#define WEATHER_DATE_LEN 16
-#define WEATHER_LOCATION_LEN 48
+#define WEATHER_SUMMARY_LEN     24
+#define WEATHER_BRIEF_TEXT_LEN  64
+#define WEATHER_DATE_LEN        16
+#define WEATHER_LOCATION_LEN    48
 #define WEATHER_DETAIL_TEXT_LEN 160
 
 typedef enum {

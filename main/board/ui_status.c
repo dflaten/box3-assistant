@@ -19,15 +19,15 @@
 
 static const char *TAG = "hue-voice";
 
-#define UI_SCREEN_WIDTH        BSP_LCD_H_RES
-#define UI_SCREEN_HEIGHT       BSP_LCD_V_RES
-#define UI_TITLE_SCALE         4
-#define UI_BODY_SCALE          2
-#define UI_CHAR_SPACING        2
-#define UI_IDLE_TIMEOUT_MS     30000
-#define UI_IDLE_POLL_MS        1000
-#define UI_IDLE_TASK_STACK     4096
-#define UI_IDLE_TASK_PRIORITY  2
+#define UI_SCREEN_WIDTH       BSP_LCD_H_RES
+#define UI_SCREEN_HEIGHT      BSP_LCD_V_RES
+#define UI_TITLE_SCALE        4
+#define UI_BODY_SCALE         2
+#define UI_CHAR_SPACING       2
+#define UI_IDLE_TIMEOUT_MS    30000
+#define UI_IDLE_POLL_MS       1000
+#define UI_IDLE_TASK_STACK    4096
+#define UI_IDLE_TASK_PRIORITY 2
 
 static esp_lcd_panel_handle_t s_panel;
 static esp_lcd_panel_io_handle_t s_io;
@@ -44,50 +44,28 @@ typedef struct {
 } glyph_t;
 
 static const glyph_t s_font[] = {
-    {' ', {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}},
-    {'!', {0x04, 0x04, 0x04, 0x04, 0x04, 0x00, 0x04}},
-    {',', {0x00, 0x00, 0x00, 0x00, 0x04, 0x04, 0x08}},
-    {'%', {0x19, 0x19, 0x02, 0x04, 0x08, 0x13, 0x13}},
-    {':', {0x00, 0x04, 0x00, 0x00, 0x00, 0x04, 0x00}},
-    {'/', {0x01, 0x02, 0x02, 0x04, 0x08, 0x08, 0x10}},
-    {'-', {0x00, 0x00, 0x00, 0x1F, 0x00, 0x00, 0x00}},
-    {'.', {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04}},
-    {'0', {0x0E, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0E}},
-    {'1', {0x04, 0x0C, 0x04, 0x04, 0x04, 0x04, 0x0E}},
-    {'2', {0x0E, 0x11, 0x01, 0x02, 0x04, 0x08, 0x1F}},
-    {'3', {0x1E, 0x01, 0x01, 0x06, 0x01, 0x01, 0x1E}},
-    {'4', {0x02, 0x06, 0x0A, 0x12, 0x1F, 0x02, 0x02}},
-    {'5', {0x1F, 0x10, 0x10, 0x1E, 0x01, 0x01, 0x1E}},
-    {'6', {0x0E, 0x10, 0x10, 0x1E, 0x11, 0x11, 0x0E}},
-    {'7', {0x1F, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08}},
-    {'8', {0x0E, 0x11, 0x11, 0x0E, 0x11, 0x11, 0x0E}},
-    {'9', {0x0E, 0x11, 0x11, 0x0F, 0x01, 0x01, 0x0E}},
-    {'A', {0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11}},
-    {'B', {0x1E, 0x11, 0x11, 0x1E, 0x11, 0x11, 0x1E}},
-    {'C', {0x0E, 0x11, 0x10, 0x10, 0x10, 0x11, 0x0E}},
-    {'D', {0x1E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x1E}},
-    {'E', {0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x1F}},
-    {'F', {0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x10}},
-    {'G', {0x0E, 0x11, 0x10, 0x17, 0x11, 0x11, 0x0E}},
-    {'H', {0x11, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11}},
-    {'I', {0x0E, 0x04, 0x04, 0x04, 0x04, 0x04, 0x0E}},
-    {'J', {0x01, 0x01, 0x01, 0x01, 0x11, 0x11, 0x0E}},
-    {'K', {0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11}},
-    {'L', {0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1F}},
-    {'M', {0x11, 0x1B, 0x15, 0x15, 0x11, 0x11, 0x11}},
-    {'N', {0x11, 0x11, 0x19, 0x15, 0x13, 0x11, 0x11}},
-    {'O', {0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E}},
-    {'P', {0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10, 0x10}},
-    {'Q', {0x0E, 0x11, 0x11, 0x11, 0x15, 0x12, 0x0D}},
-    {'R', {0x1E, 0x11, 0x11, 0x1E, 0x14, 0x12, 0x11}},
-    {'S', {0x0F, 0x10, 0x10, 0x0E, 0x01, 0x01, 0x1E}},
-    {'T', {0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04}},
-    {'U', {0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E}},
-    {'V', {0x11, 0x11, 0x11, 0x11, 0x11, 0x0A, 0x04}},
-    {'W', {0x11, 0x11, 0x11, 0x15, 0x15, 0x15, 0x0A}},
-    {'X', {0x11, 0x11, 0x0A, 0x04, 0x0A, 0x11, 0x11}},
-    {'Y', {0x11, 0x11, 0x0A, 0x04, 0x04, 0x04, 0x04}},
-    {'Z', {0x1F, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1F}},
+    {' ', {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}}, {'!', {0x04, 0x04, 0x04, 0x04, 0x04, 0x00, 0x04}},
+    {',', {0x00, 0x00, 0x00, 0x00, 0x04, 0x04, 0x08}}, {'%', {0x19, 0x19, 0x02, 0x04, 0x08, 0x13, 0x13}},
+    {':', {0x00, 0x04, 0x00, 0x00, 0x00, 0x04, 0x00}}, {'/', {0x01, 0x02, 0x02, 0x04, 0x08, 0x08, 0x10}},
+    {'-', {0x00, 0x00, 0x00, 0x1F, 0x00, 0x00, 0x00}}, {'.', {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04}},
+    {'0', {0x0E, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0E}}, {'1', {0x04, 0x0C, 0x04, 0x04, 0x04, 0x04, 0x0E}},
+    {'2', {0x0E, 0x11, 0x01, 0x02, 0x04, 0x08, 0x1F}}, {'3', {0x1E, 0x01, 0x01, 0x06, 0x01, 0x01, 0x1E}},
+    {'4', {0x02, 0x06, 0x0A, 0x12, 0x1F, 0x02, 0x02}}, {'5', {0x1F, 0x10, 0x10, 0x1E, 0x01, 0x01, 0x1E}},
+    {'6', {0x0E, 0x10, 0x10, 0x1E, 0x11, 0x11, 0x0E}}, {'7', {0x1F, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08}},
+    {'8', {0x0E, 0x11, 0x11, 0x0E, 0x11, 0x11, 0x0E}}, {'9', {0x0E, 0x11, 0x11, 0x0F, 0x01, 0x01, 0x0E}},
+    {'A', {0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11}}, {'B', {0x1E, 0x11, 0x11, 0x1E, 0x11, 0x11, 0x1E}},
+    {'C', {0x0E, 0x11, 0x10, 0x10, 0x10, 0x11, 0x0E}}, {'D', {0x1E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x1E}},
+    {'E', {0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x1F}}, {'F', {0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x10}},
+    {'G', {0x0E, 0x11, 0x10, 0x17, 0x11, 0x11, 0x0E}}, {'H', {0x11, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11}},
+    {'I', {0x0E, 0x04, 0x04, 0x04, 0x04, 0x04, 0x0E}}, {'J', {0x01, 0x01, 0x01, 0x01, 0x11, 0x11, 0x0E}},
+    {'K', {0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11}}, {'L', {0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1F}},
+    {'M', {0x11, 0x1B, 0x15, 0x15, 0x11, 0x11, 0x11}}, {'N', {0x11, 0x11, 0x19, 0x15, 0x13, 0x11, 0x11}},
+    {'O', {0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E}}, {'P', {0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10, 0x10}},
+    {'Q', {0x0E, 0x11, 0x11, 0x11, 0x15, 0x12, 0x0D}}, {'R', {0x1E, 0x11, 0x11, 0x1E, 0x14, 0x12, 0x11}},
+    {'S', {0x0F, 0x10, 0x10, 0x0E, 0x01, 0x01, 0x1E}}, {'T', {0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04}},
+    {'U', {0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E}}, {'V', {0x11, 0x11, 0x11, 0x11, 0x11, 0x0A, 0x04}},
+    {'W', {0x11, 0x11, 0x11, 0x15, 0x15, 0x15, 0x0A}}, {'X', {0x11, 0x11, 0x0A, 0x04, 0x0A, 0x11, 0x11}},
+    {'Y', {0x11, 0x11, 0x0A, 0x04, 0x04, 0x04, 0x04}}, {'Z', {0x1F, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1F}},
 };
 
 /**
@@ -97,9 +75,8 @@ static const glyph_t s_font[] = {
  * @param b Blue component in 8-bit space.
  * @return The packed RGB565 color value.
  */
-static uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b)
-{
-    return (uint16_t)(((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3));
+static uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b) {
+    return (uint16_t) (((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3));
 }
 
 /**
@@ -107,8 +84,7 @@ static uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b)
  * @param state The status state to render.
  * @return The RGB565 background color for that state.
  */
-static uint16_t state_bg(ui_status_state_t state)
-{
+static uint16_t state_bg(ui_status_state_t state) {
     switch (state) {
     case UI_STATUS_BOOTING:
         return rgb565(82, 82, 91);
@@ -135,8 +111,7 @@ static uint16_t state_bg(ui_status_state_t state)
  * @param state The status state to describe.
  * @return A pointer to static title text for the state.
  */
-static const char *state_title(ui_status_state_t state)
-{
+static const char *state_title(ui_status_state_t state) {
     switch (state) {
     case UI_STATUS_BOOTING:
         return "STARTING";
@@ -163,8 +138,7 @@ static const char *state_title(ui_status_state_t state)
  * @param state The status state to describe.
  * @return A pointer to static subtitle text for the state.
  */
-static const char *state_subtitle(ui_status_state_t state)
-{
+static const char *state_subtitle(ui_status_state_t state) {
     switch (state) {
     case UI_STATUS_BOOTING:
         return "INITIALIZING ASSISTANT";
@@ -191,8 +165,7 @@ static const char *state_subtitle(ui_status_state_t state)
  * @param c The character to render.
  * @return A pointer to the matching glyph, or the space glyph if none exists.
  */
-static const glyph_t *find_glyph(char c)
-{
+static const glyph_t *find_glyph(char c) {
     for (size_t i = 0; i < sizeof(s_font) / sizeof(s_font[0]); ++i) {
         if (s_font[i].code == c) {
             return &s_font[i];
@@ -206,8 +179,7 @@ static const glyph_t *find_glyph(char c)
  * @param on True to enable the display, false to disable it.
  * @return ESP_OK on success, or an ESP error code if panel power switching fails.
  */
-static esp_err_t display_power_set(bool on)
-{
+static esp_err_t display_power_set(bool on) {
     if (!s_ready || s_display_on == on) {
         return ESP_OK;
     }
@@ -237,8 +209,7 @@ static esp_err_t display_power_set(bool on)
  * @param color RGB565 fill color.
  * @return This function does not return a value.
  */
-static void fill_rect(int x, int y, int w, int h, uint16_t color)
-{
+static void fill_rect(int x, int y, int w, int h, uint16_t color) {
     if (x >= UI_SCREEN_WIDTH || y >= UI_SCREEN_HEIGHT || w <= 0 || h <= 0) {
         return;
     }
@@ -276,14 +247,13 @@ static void fill_rect(int x, int y, int w, int h, uint16_t color)
  * @param src Source text to copy and normalize.
  * @return This function does not return a value.
  */
-static void uppercase_copy(char *dst, size_t dst_size, const char *src)
-{
+static void uppercase_copy(char *dst, size_t dst_size, const char *src) {
     if (dst_size == 0) {
         return;
     }
     size_t i = 0;
     for (; i + 1 < dst_size && src != NULL && src[i] != '\0'; ++i) {
-        dst[i] = (char)toupper((unsigned char)src[i]);
+        dst[i] = (char) toupper((unsigned char) src[i]);
     }
     dst[i] = '\0';
 }
@@ -294,10 +264,9 @@ static void uppercase_copy(char *dst, size_t dst_size, const char *src)
  * @param scale Pixel scale factor for the built-in bitmap font.
  * @return The total width of the rendered string in pixels.
  */
-static int text_width(const char *text, int scale)
-{
+static int text_width(const char *text, int scale) {
     const int char_width = (5 * scale) + UI_CHAR_SPACING;
-    return (int)strlen(text) * char_width - UI_CHAR_SPACING;
+    return (int) strlen(text) * char_width - UI_CHAR_SPACING;
 }
 
 /**
@@ -305,8 +274,7 @@ static int text_width(const char *text, int scale)
  * @param scale Pixel scale factor for the built-in font.
  * @return The maximum character count that fits within the screen width.
  */
-static int max_chars_per_line(int scale)
-{
+static int max_chars_per_line(int scale) {
     const int char_width = (5 * scale) + UI_CHAR_SPACING;
     int max_chars = (UI_SCREEN_WIDTH + UI_CHAR_SPACING) / char_width;
     return max_chars > 0 ? max_chars : 1;
@@ -320,8 +288,7 @@ static int max_chars_per_line(int scale)
  * @param text The text to render.
  * @return This function does not return a value.
  */
-static void draw_text_centered(int y, int scale, uint16_t color, const char *text)
-{
+static void draw_text_centered(int y, int scale, uint16_t color, const char *text) {
     char upper[64];
     uppercase_copy(upper, sizeof(upper), text);
 
@@ -350,8 +317,7 @@ static void draw_text_centered(int y, int scale, uint16_t color, const char *tex
  * @param text The multi-line text block to render.
  * @return This function does not return a value.
  */
-static void draw_text_block_centered(int start_y, int scale, uint16_t color, const char *text)
-{
+static void draw_text_block_centered(int start_y, int scale, uint16_t color, const char *text) {
     if (text == NULL || text[0] == '\0') {
         return;
     }
@@ -367,7 +333,7 @@ static void draw_text_block_centered(int start_y, int scale, uint16_t color, con
         const char *segment_end = cursor;
         const char *last_space = NULL;
 
-        while (*segment_end != '\0' && *segment_end != '\n' && line_len < (size_t)max_chars) {
+        while (*segment_end != '\0' && *segment_end != '\n' && line_len < (size_t) max_chars) {
             if (*segment_end == ' ') {
                 last_space = segment_end;
             }
@@ -375,9 +341,9 @@ static void draw_text_block_centered(int start_y, int scale, uint16_t color, con
             line_len++;
         }
 
-        if (*segment_end != '\0' && *segment_end != '\n' && line_len == (size_t)max_chars && last_space != NULL) {
+        if (*segment_end != '\0' && *segment_end != '\n' && line_len == (size_t) max_chars && last_space != NULL) {
             segment_end = last_space;
-            line_len = (size_t)(segment_end - cursor);
+            line_len = (size_t) (segment_end - cursor);
         }
 
         if (line_len >= sizeof(line)) {
@@ -409,8 +375,7 @@ static void draw_text_block_centered(int start_y, int scale, uint16_t color, con
  * @param detail Optional detail text to show beneath the title and subtitle.
  * @return This function does not return a value.
  */
-static void render_status(ui_status_state_t state, const char *detail)
-{
+static void render_status(ui_status_state_t state, const char *detail) {
     const uint16_t bg = state_bg(state);
     const uint16_t fg = rgb565(255, 255, 255);
     const char *title = state_title(state);
@@ -436,8 +401,7 @@ static void render_status(ui_status_state_t state, const char *detail)
  * @param location_text Weather/location label shown at the bottom of the screen.
  * @return This function does not return a value.
  */
-static void render_clock(const char *time_text, const char *date_text, const char *location_text)
-{
+static void render_clock(const char *time_text, const char *date_text, const char *location_text) {
     const uint16_t bg = state_bg(UI_STATUS_CLOCK);
     const uint16_t fg = rgb565(255, 255, 255);
     const uint16_t muted = rgb565(191, 219, 254);
@@ -457,8 +421,7 @@ static void render_clock(const char *time_text, const char *date_text, const cha
  * @return This task does not return.
  * @note The display stays awake for non-ready states and any recent activity.
  */
-static void ui_idle_task(void *arg)
-{
+static void ui_idle_task(void *arg) {
     while (true) {
         vTaskDelay(pdMS_TO_TICKS(UI_IDLE_POLL_MS));
         if (!s_ready || s_ui_mutex == NULL) {
@@ -483,14 +446,13 @@ static void ui_idle_task(void *arg)
  * @return ESP_OK on success, or an ESP error code if display startup fails.
  * @note This also shows the initial booting screen immediately after setup.
  */
-esp_err_t ui_status_init(void)
-{
+esp_err_t ui_status_init(void) {
     if (s_ready) {
         return ESP_OK;
     }
 
     const bsp_display_config_t display_cfg = {
-        .max_transfer_sz = BSP_LCD_H_RES * 20 * (int)sizeof(uint16_t),
+        .max_transfer_sz = BSP_LCD_H_RES * 20 * (int) sizeof(uint16_t),
     };
 
     esp_err_t err = bsp_display_new(&display_cfg, &s_panel, &s_io);
@@ -525,8 +487,7 @@ esp_err_t ui_status_init(void)
  * @return This function does not return a value.
  * @note Calls made before UI initialization are ignored.
  */
-static void ui_status_note_activity(void)
-{
+static void ui_status_note_activity(void) {
     s_last_activity_tick = xTaskGetTickCount();
 }
 
@@ -537,8 +498,7 @@ static void ui_status_note_activity(void)
  * @return This function does not return a value.
  * @note This wakes the display if it has been idled off.
  */
-void ui_status_set(ui_status_state_t state, const char *detail)
-{
+void ui_status_set(ui_status_state_t state, const char *detail) {
     if (!s_ready || s_ui_mutex == NULL) {
         return;
     }
@@ -563,8 +523,7 @@ void ui_status_set(ui_status_state_t state, const char *detail)
  * @return This function does not return a value.
  * @note Clock updates intentionally do not reset the generic ready-screen idle timer.
  */
-void ui_status_show_clock(const char *time_text, const char *date_text, const char *location_text)
-{
+void ui_status_show_clock(const char *time_text, const char *date_text, const char *location_text) {
     if (!s_ready || s_ui_mutex == NULL) {
         return;
     }
@@ -585,8 +544,7 @@ void ui_status_show_clock(const char *time_text, const char *date_text, const ch
  * @param on True to enable the display, false to disable it.
  * @return ESP_OK on success, or an ESP error code if the display transition fails.
  */
-esp_err_t ui_status_display_set(bool on)
-{
+esp_err_t ui_status_display_set(bool on) {
     if (!s_ready || s_ui_mutex == NULL) {
         return ESP_ERR_INVALID_STATE;
     }

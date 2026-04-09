@@ -22,7 +22,7 @@
 
 #define WEATHER_HTTP_TRACE_BODY_SIZE 4096
 #define WEATHER_MAX_CONNECT_ATTEMPTS 3
-#define WEATHER_RETRY_DELAY_MS 250
+#define WEATHER_RETRY_DELAY_MS       250
 
 typedef struct {
     char *body;
@@ -33,8 +33,7 @@ typedef struct {
 static const char *TAG = "weather";
 static esp_http_client_handle_t s_active_client;
 
-static bool weather_should_retry(esp_err_t err)
-{
+static bool weather_should_retry(esp_err_t err) {
     return err == ESP_ERR_HTTP_CONNECT;
 }
 
@@ -44,9 +43,8 @@ static bool weather_should_retry(esp_err_t err)
  * @return ESP_OK after processing the event.
  * @note Response data is appended into the caller-provided trace buffer.
  */
-static esp_err_t weather_http_event_handler(esp_http_client_event_t *evt)
-{
-    weather_http_trace_t *trace = (weather_http_trace_t *)evt->user_data;
+static esp_err_t weather_http_event_handler(esp_http_client_event_t *evt) {
+    weather_http_trace_t *trace = (weather_http_trace_t *) evt->user_data;
     if (trace == NULL || trace->body == NULL || trace->capacity <= 0) {
         return ESP_OK;
     }
@@ -69,8 +67,7 @@ static esp_err_t weather_http_event_handler(esp_http_client_event_t *evt)
  * @param trace The trace structure to initialize.
  * @return ESP_OK on success, or an ESP error code if allocation fails.
  */
-static esp_err_t weather_http_trace_init(weather_http_trace_t *trace)
-{
+static esp_err_t weather_http_trace_init(weather_http_trace_t *trace) {
     if (trace == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -92,8 +89,7 @@ static esp_err_t weather_http_trace_init(weather_http_trace_t *trace)
  * @param trace The trace structure to clear and free.
  * @return This function does not return a value.
  */
-static void weather_http_trace_deinit(weather_http_trace_t *trace)
-{
+static void weather_http_trace_deinit(weather_http_trace_t *trace) {
     if (trace == NULL) {
         return;
     }
@@ -109,8 +105,7 @@ static void weather_http_trace_deinit(weather_http_trace_t *trace)
  * @param code The numeric weather code from the API response.
  * @return A pointer to static summary text for that code.
  */
-static const char *weather_code_summary(int code)
-{
+static const char *weather_code_summary(int code) {
     switch (code) {
     case 0:
         return "Clear";
@@ -160,8 +155,7 @@ static const char *weather_code_summary(int code)
  * @param out_value Output for the parsed numeric value.
  * @return ESP_OK on success, or ESP_FAIL if the field is missing or not numeric.
  */
-static esp_err_t json_get_number(const cJSON *object, const char *key, double *out_value)
-{
+static esp_err_t json_get_number(const cJSON *object, const char *key, double *out_value) {
     const cJSON *item = cJSON_GetObjectItemCaseSensitive(object, key);
     if (!cJSON_IsNumber(item)) {
         return ESP_FAIL;
@@ -180,8 +174,8 @@ static esp_err_t json_get_number(const cJSON *object, const char *key, double *o
  * @param buffer_size Size of the destination buffer in bytes.
  * @return ESP_OK on success, or ESP_FAIL if the field is missing or invalid.
  */
-static esp_err_t json_get_array_string_at(const cJSON *object, const char *key, int index, char *buffer, size_t buffer_size)
-{
+static esp_err_t
+json_get_array_string_at(const cJSON *object, const char *key, int index, char *buffer, size_t buffer_size) {
     const cJSON *array = cJSON_GetObjectItemCaseSensitive(object, key);
     if (!cJSON_IsArray(array) || buffer == NULL || buffer_size == 0) {
         return ESP_FAIL;
@@ -204,8 +198,7 @@ static esp_err_t json_get_array_string_at(const cJSON *object, const char *key, 
  * @param out_value Output for the parsed numeric value.
  * @return ESP_OK on success, or ESP_FAIL if the field is missing or invalid.
  */
-static esp_err_t json_get_array_number_at(const cJSON *object, const char *key, int index, double *out_value)
-{
+static esp_err_t json_get_array_number_at(const cJSON *object, const char *key, int index, double *out_value) {
     const cJSON *array = cJSON_GetObjectItemCaseSensitive(object, key);
     if (!cJSON_IsArray(array)) {
         return ESP_FAIL;
@@ -227,8 +220,7 @@ static esp_err_t json_get_array_number_at(const cJSON *object, const char *key, 
  * @param out_value Output for the parsed coordinate.
  * @return ESP_OK on success, or an ESP error code if parsing fails.
  */
-static esp_err_t weather_parse_coordinate(const char *value, const char *label, double *out_value)
-{
+static esp_err_t weather_parse_coordinate(const char *value, const char *label, double *out_value) {
     if (value == NULL || out_value == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -250,38 +242,42 @@ static esp_err_t weather_parse_coordinate(const char *value, const char *label, 
  * @param out_report Output for the parsed weather report.
  * @return ESP_OK on success, or an ESP error code if fetch or parsing fails.
  */
-static esp_err_t weather_client_fetch_forecast(weather_forecast_day_t day, weather_report_t *out_report)
-{
+static esp_err_t weather_client_fetch_forecast(weather_forecast_day_t day, weather_report_t *out_report) {
     if (out_report == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    *out_report = (weather_report_t){ 0 };
+    *out_report = (weather_report_t) {0};
 
     if (!wifi_is_connected()) {
-        ESP_LOGW(TAG, "Skipping weather fetch for day=%d because Wi-Fi is disconnected", (int)day);
+        ESP_LOGW(TAG, "Skipping weather fetch for day=%d because Wi-Fi is disconnected", (int) day);
         return ESP_ERR_INVALID_STATE;
     }
 
     double latitude = 0;
     double longitude = 0;
-    ESP_RETURN_ON_ERROR(weather_parse_coordinate(CONFIG_WEATHER_LATITUDE, "latitude", &latitude), TAG, "Invalid weather latitude");
-    ESP_RETURN_ON_ERROR(weather_parse_coordinate(CONFIG_WEATHER_LONGITUDE, "longitude", &longitude), TAG, "Invalid weather longitude");
+    ESP_RETURN_ON_ERROR(
+        weather_parse_coordinate(CONFIG_WEATHER_LATITUDE, "latitude", &latitude), TAG, "Invalid weather latitude");
+    ESP_RETURN_ON_ERROR(
+        weather_parse_coordinate(CONFIG_WEATHER_LONGITUDE, "longitude", &longitude), TAG, "Invalid weather longitude");
 
     char url[512];
     snprintf(url,
              sizeof(url),
-             "%s/v1/forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,weather_code,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=%s&forecast_days=2",
+             "%s/v1/"
+             "forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,weather_code,wind_speed_10m&daily="
+             "temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code&temperature_unit="
+             "fahrenheit&wind_speed_unit=mph&timezone=%s&forecast_days=2",
              CONFIG_WEATHER_BASE_URL,
              latitude,
              longitude,
              CONFIG_WEATHER_TIMEZONE);
 
-    ESP_LOGI(TAG, "Starting weather fetch day=%d for %s from %s", (int)day, CONFIG_ASSISTANT_LOCATION_NAME, url);
+    ESP_LOGI(TAG, "Starting weather fetch day=%d for %s from %s", (int) day, CONFIG_ASSISTANT_LOCATION_NAME, url);
     assistant_diag_update_detail(ASSISTANT_STAGE_EXECUTING, ASSISTANT_DIAG_DETAIL_WEATHER_START, day, 0, ESP_OK);
 
     esp_err_t err = ESP_FAIL;
-    weather_http_trace_t trace = { 0 };
+    weather_http_trace_t trace = {0};
     cJSON *root = NULL;
     for (int attempt = 1; attempt <= WEATHER_MAX_CONNECT_ATTEMPTS; ++attempt) {
         ESP_RETURN_ON_ERROR(weather_http_trace_init(&trace), TAG, "Failed to allocate weather trace buffer");
@@ -302,23 +298,21 @@ static esp_err_t weather_client_fetch_forecast(weather_forecast_day_t day, weath
         }
 
         s_active_client = client;
-        assistant_diag_update_detail(ASSISTANT_STAGE_EXECUTING, ASSISTANT_DIAG_DETAIL_WEATHER_ATTEMPT, day, (uint32_t)attempt, ESP_OK);
+        assistant_diag_update_detail(
+            ASSISTANT_STAGE_EXECUTING, ASSISTANT_DIAG_DETAIL_WEATHER_ATTEMPT, day, (uint32_t) attempt, ESP_OK);
 
         int64_t request_start_us = esp_timer_get_time();
         err = esp_http_client_perform(client);
         int64_t request_elapsed_ms = (esp_timer_get_time() - request_start_us) / 1000;
         int status = esp_http_client_get_status_code(client);
         if (err != ESP_OK) {
-            assistant_diag_update_detail(ASSISTANT_STAGE_EXECUTING,
-                                         ASSISTANT_DIAG_DETAIL_WEATHER_ATTEMPT,
-                                         day,
-                                         (uint32_t)attempt,
-                                         err);
+            assistant_diag_update_detail(
+                ASSISTANT_STAGE_EXECUTING, ASSISTANT_DIAG_DETAIL_WEATHER_ATTEMPT, day, (uint32_t) attempt, err);
             ESP_LOGE(TAG,
                      "Weather request attempt %d/%d failed after %lld ms: %s (status=%d)",
                      attempt,
                      WEATHER_MAX_CONNECT_ATTEMPTS,
-                     (long long)request_elapsed_ms,
+                     (long long) request_elapsed_ms,
                      esp_err_to_name(err),
                      status);
             esp_http_client_cleanup(client);
@@ -332,17 +326,14 @@ static esp_err_t weather_client_fetch_forecast(weather_forecast_day_t day, weath
         }
 
         if (status < 200 || status >= 300) {
-            assistant_diag_update_detail(ASSISTANT_STAGE_EXECUTING,
-                                         ASSISTANT_DIAG_DETAIL_WEATHER_ATTEMPT,
-                                         day,
-                                         (uint32_t)attempt,
-                                         ESP_FAIL);
+            assistant_diag_update_detail(
+                ASSISTANT_STAGE_EXECUTING, ASSISTANT_DIAG_DETAIL_WEATHER_ATTEMPT, day, (uint32_t) attempt, ESP_FAIL);
             ESP_LOGE(TAG,
                      "Weather request attempt %d/%d returned HTTP %d after %lld ms",
                      attempt,
                      WEATHER_MAX_CONNECT_ATTEMPTS,
                      status,
-                     (long long)request_elapsed_ms);
+                     (long long) request_elapsed_ms);
             esp_http_client_cleanup(client);
             s_active_client = NULL;
             weather_http_trace_deinit(&trace);
@@ -353,11 +344,12 @@ static esp_err_t weather_client_fetch_forecast(weather_forecast_day_t day, weath
                  "Weather request attempt %d/%d completed in %lld ms (status=%d, bytes=%d)",
                  attempt,
                  WEATHER_MAX_CONNECT_ATTEMPTS,
-                 (long long)request_elapsed_ms,
+                 (long long) request_elapsed_ms,
                  status,
                  trace.len);
 
-        assistant_diag_update_detail(ASSISTANT_STAGE_EXECUTING, ASSISTANT_DIAG_DETAIL_WEATHER_PARSE, day, (uint32_t)attempt, ESP_OK);
+        assistant_diag_update_detail(
+            ASSISTANT_STAGE_EXECUTING, ASSISTANT_DIAG_DETAIL_WEATHER_PARSE, day, (uint32_t) attempt, ESP_OK);
         root = cJSON_Parse(trace.body);
         esp_http_client_cleanup(client);
         s_active_client = NULL;
@@ -421,15 +413,16 @@ static esp_err_t weather_client_fetch_forecast(weather_forecast_day_t day, weath
 
     snprintf(out_report->location, sizeof(out_report->location), "%s", CONFIG_ASSISTANT_LOCATION_NAME);
     out_report->has_current_conditions = day == WEATHER_FORECAST_TODAY;
-    out_report->current_temp_f = (int)(current_temp >= 0 ? current_temp + 0.5 : current_temp - 0.5);
-    out_report->max_temp_f = (int)(max_temp >= 0 ? max_temp + 0.5 : max_temp - 0.5);
-    out_report->min_temp_f = (int)(min_temp >= 0 ? min_temp + 0.5 : min_temp - 0.5);
-    out_report->max_precip_probability = (int)(precip_probability + 0.5);
-    out_report->wind_speed_mph = (int)(current_wind_speed + 0.5);
+    out_report->current_temp_f = (int) (current_temp >= 0 ? current_temp + 0.5 : current_temp - 0.5);
+    out_report->max_temp_f = (int) (max_temp >= 0 ? max_temp + 0.5 : max_temp - 0.5);
+    out_report->min_temp_f = (int) (min_temp >= 0 ? min_temp + 0.5 : min_temp - 0.5);
+    out_report->max_precip_probability = (int) (precip_probability + 0.5);
+    out_report->wind_speed_mph = (int) (current_wind_speed + 0.5);
     snprintf(out_report->summary,
              sizeof(out_report->summary),
              "%s",
-             weather_code_summary((int)((day == WEATHER_FORECAST_TODAY ? current_weather_code : daily_weather_code) + 0.5)));
+             weather_code_summary(
+                 (int) ((day == WEATHER_FORECAST_TODAY ? current_weather_code : daily_weather_code) + 0.5)));
 
     ESP_LOGI(TAG,
              "%s weather day=%d date=%s now=%dF high=%dF low=%dF precip=%d%% wind=%dmph summary=%s",
@@ -454,8 +447,7 @@ static esp_err_t weather_client_fetch_forecast(weather_forecast_day_t day, weath
  * @param out_report Output for the parsed weather report.
  * @return ESP_OK on success, or an ESP error code if fetch or parsing fails.
  */
-esp_err_t weather_client_fetch_today(weather_report_t *out_report)
-{
+esp_err_t weather_client_fetch_today(weather_report_t *out_report) {
     return weather_client_fetch_forecast(WEATHER_FORECAST_TODAY, out_report);
 }
 
@@ -464,13 +456,11 @@ esp_err_t weather_client_fetch_today(weather_report_t *out_report)
  * @param out_report Output for the parsed weather report.
  * @return ESP_OK on success, or an ESP error code if fetch or parsing fails.
  */
-esp_err_t weather_client_fetch_tomorrow(weather_report_t *out_report)
-{
+esp_err_t weather_client_fetch_tomorrow(weather_report_t *out_report) {
     return weather_client_fetch_forecast(WEATHER_FORECAST_TOMORROW, out_report);
 }
 
-esp_err_t weather_client_cancel_active_request(void)
-{
+esp_err_t weather_client_cancel_active_request(void) {
     esp_http_client_handle_t client = s_active_client;
     if (client == NULL) {
         return ESP_ERR_INVALID_STATE;

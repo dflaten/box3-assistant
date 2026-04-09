@@ -32,8 +32,7 @@ static esp_http_client_handle_t s_active_client;
  * @param err The ESP error code returned by a Hue client operation.
  * @return True when the error indicates Wi-Fi or TCP connectivity failure, otherwise false.
  */
-bool hue_client_error_is_connectivity(esp_err_t err)
-{
+bool hue_client_error_is_connectivity(esp_err_t err) {
     return err == ESP_ERR_HTTP_CONNECT || err == ESP_ERR_TIMEOUT || err == ESP_ERR_INVALID_STATE;
 }
 
@@ -43,9 +42,8 @@ bool hue_client_error_is_connectivity(esp_err_t err)
  * @return ESP_OK after processing the event.
  * @note Response data is appended into the caller-provided trace buffer.
  */
-static esp_err_t hue_http_event_handler(esp_http_client_event_t *evt)
-{
-    hue_http_trace_t *trace = (hue_http_trace_t *)evt->user_data;
+static esp_err_t hue_http_event_handler(esp_http_client_event_t *evt) {
+    hue_http_trace_t *trace = (hue_http_trace_t *) evt->user_data;
     if (trace == NULL || trace->body == NULL || trace->capacity <= 0) {
         return ESP_OK;
     }
@@ -72,8 +70,7 @@ static esp_err_t hue_http_event_handler(esp_http_client_event_t *evt)
  * @param dst_size Size of the destination buffer in bytes.
  * @return This function does not return a value.
  */
-static void normalize_group_name(const char *src, char *dst, size_t dst_size)
-{
+static void normalize_group_name(const char *src, char *dst, size_t dst_size) {
     size_t out = 0;
     bool pending_space = false;
 
@@ -82,12 +79,12 @@ static void normalize_group_name(const char *src, char *dst, size_t dst_size)
     }
 
     for (size_t i = 0; src != NULL && src[i] != '\0' && out + 1 < dst_size; ++i) {
-        unsigned char ch = (unsigned char)src[i];
+        unsigned char ch = (unsigned char) src[i];
         if (isalnum(ch)) {
             if (pending_space && out > 0 && out + 1 < dst_size) {
                 dst[out++] = ' ';
             }
-            dst[out++] = (char)tolower(ch);
+            dst[out++] = (char) tolower(ch);
             pending_space = false;
         } else if (out > 0) {
             pending_space = true;
@@ -105,8 +102,7 @@ static void normalize_group_name(const char *src, char *dst, size_t dst_size)
  * @param name The normalized group name to validate.
  * @return True if the name is usable for commands, otherwise false.
  */
-static bool is_group_name_valid(const char *name)
-{
+static bool is_group_name_valid(const char *name) {
     return name != NULL && strlen(name) >= 3;
 }
 
@@ -115,8 +111,7 @@ static bool is_group_name_valid(const char *name)
  * @param trace The trace structure to initialize.
  * @return ESP_OK on success, or an ESP error code if allocation fails.
  */
-static esp_err_t hue_http_trace_init(hue_http_trace_t *trace)
-{
+static esp_err_t hue_http_trace_init(hue_http_trace_t *trace) {
     if (trace == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -138,8 +133,7 @@ static esp_err_t hue_http_trace_init(hue_http_trace_t *trace)
  * @param trace The trace structure to clear and free.
  * @return This function does not return a value.
  */
-static void hue_http_trace_deinit(hue_http_trace_t *trace)
-{
+static void hue_http_trace_deinit(hue_http_trace_t *trace) {
     if (trace == NULL) {
         return;
     }
@@ -159,12 +153,8 @@ static void hue_http_trace_deinit(hue_http_trace_t *trace)
  * @param out_status Optional output for the HTTP status code.
  * @return ESP_OK on success, or an ESP error code if the request fails.
  */
-static esp_err_t hue_http_perform(const char *url,
-                                  esp_http_client_method_t method,
-                                  const char *body,
-                                  hue_http_trace_t *trace,
-                                  int *out_status)
-{
+static esp_err_t hue_http_perform(
+    const char *url, esp_http_client_method_t method, const char *body, hue_http_trace_t *trace, int *out_status) {
     if (!wifi_is_connected()) {
         ESP_LOGW(TAG, "Skipping Hue HTTP request because Wi-Fi is not connected");
         if (out_status != NULL) {
@@ -203,7 +193,8 @@ static esp_err_t hue_http_perform(const char *url,
     }
 
     if (err == ESP_OK) {
-        ESP_LOGI(TAG, "Hue request status=%d, content_length=%lld, chunked=%s, response_bytes=%d",
+        ESP_LOGI(TAG,
+                 "Hue request status=%d, content_length=%lld, chunked=%s, response_bytes=%d",
                  status,
                  content_length,
                  is_chunked ? "true" : "false",
@@ -221,7 +212,8 @@ static esp_err_t hue_http_perform(const char *url,
     // this specific case as success instead of surfacing it as a failed light action.
     if (err == ESP_ERR_HTTP_INCOMPLETE_DATA && status >= 200 && status < 300) {
         ESP_LOGW(TAG, "Hue response ended early but bridge returned HTTP %d; treating as success", status);
-        ESP_LOGW(TAG, "Hue response details: content_length=%lld, chunked=%s, response_bytes=%d",
+        ESP_LOGW(TAG,
+                 "Hue response details: content_length=%lld, chunked=%s, response_bytes=%d",
                  content_length,
                  is_chunked ? "true" : "false",
                  trace != NULL ? trace->len : 0);
@@ -233,7 +225,8 @@ static esp_err_t hue_http_perform(const char *url,
         return ESP_OK;
     }
 
-    ESP_LOGE(TAG, "Hue HTTP request failed: %s (status=%d, content_length=%lld, chunked=%s, response_bytes=%d)",
+    ESP_LOGE(TAG,
+             "Hue HTTP request failed: %s (status=%d, content_length=%lld, chunked=%s, response_bytes=%d)",
              esp_err_to_name(err),
              status,
              content_length,
@@ -252,8 +245,7 @@ static esp_err_t hue_http_perform(const char *url,
  * @brief Probe the configured Hue bridge and verify the response looks like a Hue bridge.
  * @return ESP_OK when the bridge is reachable and returns a valid Hue config payload, or an ESP error code otherwise.
  */
-esp_err_t hue_client_probe_bridge(void)
-{
+esp_err_t hue_client_probe_bridge(void) {
     if (strlen(CONFIG_HUE_BRIDGE_IP) == 0) {
         return ESP_ERR_INVALID_ARG;
     }
@@ -261,7 +253,7 @@ esp_err_t hue_client_probe_bridge(void)
     char url[96];
     snprintf(url, sizeof(url), "http://%s/api/config", CONFIG_HUE_BRIDGE_IP);
 
-    hue_http_trace_t trace = { 0 };
+    hue_http_trace_t trace = {0};
     int status = 0;
     ESP_RETURN_ON_ERROR(hue_http_trace_init(&trace), TAG, "Failed to allocate HTTP trace buffer");
 
@@ -306,20 +298,16 @@ esp_err_t hue_client_probe_bridge(void)
  * @param out_count Output for the number of groups written.
  * @return ESP_OK on success, or an ESP error code if fetch or parsing fails.
  */
-static esp_err_t hue_client_fetch_groups(hue_group_t *groups, size_t max_groups, size_t *out_count)
-{
+static esp_err_t hue_client_fetch_groups(hue_group_t *groups, size_t max_groups, size_t *out_count) {
     if (groups == NULL || out_count == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
     *out_count = 0;
 
     char url[160];
-    snprintf(url, sizeof(url),
-             "http://%s/api/%s/groups",
-             CONFIG_HUE_BRIDGE_IP,
-             CONFIG_HUE_BRIDGE_API_KEY);
+    snprintf(url, sizeof(url), "http://%s/api/%s/groups", CONFIG_HUE_BRIDGE_IP, CONFIG_HUE_BRIDGE_API_KEY);
 
-    hue_http_trace_t trace = { 0 };
+    hue_http_trace_t trace = {0};
     int status = 0;
     ESP_RETURN_ON_ERROR(hue_http_trace_init(&trace), TAG, "Failed to allocate HTTP trace buffer");
 
@@ -369,7 +357,7 @@ static esp_err_t hue_client_fetch_groups(hue_group_t *groups, size_t max_groups,
     hue_http_trace_deinit(&trace);
 
     *out_count = count;
-    ESP_LOGI(TAG, "Fetched %u Hue group(s) from bridge", (unsigned)count);
+    ESP_LOGI(TAG, "Fetched %u Hue group(s) from bridge", (unsigned) count);
     return ESP_OK;
 }
 
@@ -379,27 +367,24 @@ static esp_err_t hue_client_fetch_groups(hue_group_t *groups, size_t max_groups,
  * @param on True to turn the group on, false to turn it off.
  * @return ESP_OK on success, or an ESP error code if the request fails.
  */
-esp_err_t hue_client_set_group_by_id(const char *group_id, bool on)
-{
+esp_err_t hue_client_set_group_by_id(const char *group_id, bool on) {
     if (group_id == NULL || group_id[0] == '\0') {
         return ESP_ERR_INVALID_ARG;
     }
 
     char url[192];
-    snprintf(url, sizeof(url),
+    snprintf(url,
+             sizeof(url),
              "http://%s/api/%s/groups/%s/action",
              CONFIG_HUE_BRIDGE_IP,
              CONFIG_HUE_BRIDGE_API_KEY,
              group_id);
 
     const char *body = on ? "{\"on\":true}" : "{\"on\":false}";
-    hue_http_trace_t trace = { 0 };
+    hue_http_trace_t trace = {0};
     ESP_RETURN_ON_ERROR(hue_http_trace_init(&trace), TAG, "Failed to allocate HTTP trace buffer");
 
-    ESP_LOGI(TAG, "Sending Hue group action: bridge=%s group=%s payload=%s",
-             CONFIG_HUE_BRIDGE_IP,
-             group_id,
-             body);
+    ESP_LOGI(TAG, "Sending Hue group action: bridge=%s group=%s payload=%s", CONFIG_HUE_BRIDGE_IP, group_id, body);
 
     esp_err_t err = hue_http_perform(url, HTTP_METHOD_PUT, body, &trace, NULL);
     hue_http_trace_deinit(&trace);
@@ -414,17 +399,15 @@ esp_err_t hue_client_set_group_by_id(const char *group_id, bool on)
  * @return ESP_OK on success, or an ESP error code if syncing fails.
  * @note Names are normalized and duplicates are removed before acceptance.
  */
-esp_err_t hue_client_sync_groups(hue_group_t *groups, size_t max_groups, size_t *out_count)
-{
+esp_err_t hue_client_sync_groups(hue_group_t *groups, size_t max_groups, size_t *out_count) {
     if (groups == NULL || out_count == NULL) {
         return ESP_ERR_INVALID_ARG;
     }
 
     hue_group_t fetched[HUE_GROUP_MAX_COUNT];
     size_t fetched_count = 0;
-    ESP_RETURN_ON_ERROR(hue_client_fetch_groups(fetched, HUE_GROUP_MAX_COUNT, &fetched_count),
-                        TAG,
-                        "Failed to fetch Hue groups");
+    ESP_RETURN_ON_ERROR(
+        hue_client_fetch_groups(fetched, HUE_GROUP_MAX_COUNT, &fetched_count), TAG, "Failed to fetch Hue groups");
 
     size_t kept = 0;
     for (size_t i = 0; i < fetched_count && kept < max_groups; ++i) {
@@ -443,7 +426,8 @@ esp_err_t hue_client_sync_groups(hue_group_t *groups, size_t max_groups, size_t 
             }
         }
         if (duplicate) {
-            ESP_LOGW(TAG, "Skipping Hue group '%s' because its normalized name duplicates another group", fetched[i].name);
+            ESP_LOGW(
+                TAG, "Skipping Hue group '%s' because its normalized name duplicates another group", fetched[i].name);
             continue;
         }
 
@@ -453,12 +437,11 @@ esp_err_t hue_client_sync_groups(hue_group_t *groups, size_t max_groups, size_t 
     }
 
     *out_count = kept;
-    ESP_LOGI(TAG, "Accepted %u usable Hue group(s) for runtime commands", (unsigned)kept);
+    ESP_LOGI(TAG, "Accepted %u usable Hue group(s) for runtime commands", (unsigned) kept);
     return ESP_OK;
 }
 
-esp_err_t hue_client_cancel_active_request(void)
-{
+esp_err_t hue_client_cancel_active_request(void) {
     esp_http_client_handle_t client = s_active_client;
     if (client == NULL) {
         return ESP_ERR_INVALID_STATE;

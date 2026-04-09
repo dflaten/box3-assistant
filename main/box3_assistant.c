@@ -40,19 +40,19 @@
 #include "system/wifi_support.h"
 #include "weather/weather_client.h"
 
-#define COMMAND_WINDOW_MS 10000
-#define COMMAND_MIN_LISTEN_MS 3000
-#define WEATHER_STATUS_HOLD_MS 15000
-#define MAX_FETCH_FAILURES 50
-#define ASSISTANT_SESSION_TIMEOUT_MS 30000
+#define COMMAND_WINDOW_MS                    10000
+#define COMMAND_MIN_LISTEN_MS                3000
+#define WEATHER_STATUS_HOLD_MS               15000
+#define MAX_FETCH_FAILURES                   50
+#define ASSISTANT_SESSION_TIMEOUT_MS         30000
 #define ASSISTANT_LISTENING_STALL_TIMEOUT_MS 12000
-#define ASSISTANT_WATCHDOG_POLL_MS 1000
-#define ASSISTANT_EXECUTION_CANCEL_GRACE_MS 5000
-#define PRESENCE_TIMEOUT_MS 30000
-#define PRESENCE_POLL_MS 250
-#define PRESENCE_TASK_STACK 4096
-#define PRESENCE_TASK_PRIORITY 3
-#define PRESENCE_GPIO BSP_PMOD1_IO5
+#define ASSISTANT_WATCHDOG_POLL_MS           1000
+#define ASSISTANT_EXECUTION_CANCEL_GRACE_MS  5000
+#define PRESENCE_TIMEOUT_MS                  30000
+#define PRESENCE_POLL_MS                     250
+#define PRESENCE_TASK_STACK                  4096
+#define PRESENCE_TASK_PRIORITY               3
+#define PRESENCE_GPIO                        BSP_PMOD1_IO5
 
 static const char *TAG = "hue-voice";
 static const char *WAKE_WORD = "Hi ESP";
@@ -61,15 +61,18 @@ static const TickType_t WEATHER_STATUS_HOLD_TIME = pdMS_TO_TICKS(WEATHER_STATUS_
 static const TickType_t BRIDGE_ERROR_HOLD_TIME = pdMS_TO_TICKS(2500);
 
 static void audio_feed_set_paused(assistant_runtime_t *rt, bool paused);
-static void show_status_then_return_to_standby(assistant_runtime_t *rt, ui_status_state_t state, const char *detail, TickType_t hold_time);
+static void show_status_then_return_to_standby(assistant_runtime_t *rt,
+                                               ui_status_state_t state,
+                                               const char *detail,
+                                               TickType_t hold_time);
 static void clear_active_session(assistant_runtime_t *rt);
 static esp_err_t init_presence_sensor(void);
 static void presence_clock_task(void *arg);
 static void format_hue_probe_error_detail(esp_err_t probe_err, char *detail, size_t detail_size);
-static void format_hue_request_error_detail(const char *fallback, esp_err_t request_err, char *detail, size_t detail_size);
+static void
+format_hue_request_error_detail(const char *fallback, esp_err_t request_err, char *detail, size_t detail_size);
 
-static const char *assistant_stage_name(assistant_stage_t stage)
-{
+static const char *assistant_stage_name(assistant_stage_t stage) {
     switch (stage) {
     case ASSISTANT_STAGE_STANDBY:
         return "standby";
@@ -89,8 +92,7 @@ static const char *assistant_stage_name(assistant_stage_t stage)
  * @param detail_size Size of the destination buffer in bytes.
  * @return This function does not return a value.
  */
-static void format_hue_probe_error_detail(esp_err_t probe_err, char *detail, size_t detail_size)
-{
+static void format_hue_probe_error_detail(esp_err_t probe_err, char *detail, size_t detail_size) {
     if (detail == NULL || detail_size == 0) {
         return;
     }
@@ -113,11 +115,8 @@ static void format_hue_probe_error_detail(esp_err_t probe_err, char *detail, siz
  * @return This function does not return a value.
  * @note This re-probes the bridge so the UI can distinguish bad bridge addressing from a command-specific failure.
  */
-static void format_hue_request_error_detail(const char *fallback,
-                                            esp_err_t request_err,
-                                            char *detail,
-                                            size_t detail_size)
-{
+static void
+format_hue_request_error_detail(const char *fallback, esp_err_t request_err, char *detail, size_t detail_size) {
     if (detail == NULL || detail_size == 0) {
         return;
     }
@@ -145,8 +144,7 @@ static void format_hue_request_error_detail(const char *fallback,
  * @return This function does not return a value.
  * @note This clears the active recognition state, resets the AFE buffer, and re-enables WakeNet.
  */
-static void return_to_standby(assistant_runtime_t *rt)
-{
+static void return_to_standby(assistant_runtime_t *rt) {
     rt->assistant_awake = false;
     rt->assistant_awake_tick = 0;
     rt->speech_progress_tick = xTaskGetTickCount();
@@ -181,8 +179,10 @@ static void return_to_standby(assistant_runtime_t *rt)
  * @return This function does not return a value.
  * @note Pausing first prevents the AFE feed ringbuffer from filling while the detect task is sleeping.
  */
-static void show_status_then_return_to_standby(assistant_runtime_t *rt, ui_status_state_t state, const char *detail, TickType_t hold_time)
-{
+static void show_status_then_return_to_standby(assistant_runtime_t *rt,
+                                               ui_status_state_t state,
+                                               const char *detail,
+                                               TickType_t hold_time) {
     audio_feed_set_paused(rt, true);
     ui_status_set(state, detail);
     vTaskDelay(hold_time);
@@ -196,8 +196,7 @@ static void show_status_then_return_to_standby(assistant_runtime_t *rt, ui_statu
  * @return This function does not return a value.
  * @note This is used once command execution has completed so post-action UI delays do not trip the session watchdog.
  */
-static void clear_active_session(assistant_runtime_t *rt)
-{
+static void clear_active_session(assistant_runtime_t *rt) {
     rt->assistant_awake = false;
     rt->assistant_awake_tick = 0;
     rt->speech_progress_tick = xTaskGetTickCount();
@@ -210,8 +209,7 @@ static void clear_active_session(assistant_runtime_t *rt)
  * @brief Configure the dock motion output pin used for presence-triggered clock wakeups.
  * @return ESP_OK on success, or an ESP error code if GPIO setup fails.
  */
-static esp_err_t init_presence_sensor(void)
-{
+static esp_err_t init_presence_sensor(void) {
     const gpio_config_t io_config = {
         .pin_bit_mask = 1ULL << PRESENCE_GPIO,
         .mode = GPIO_MODE_INPUT,
@@ -231,17 +229,16 @@ static esp_err_t init_presence_sensor(void)
  * @return This task does not return.
  * @note The motion sensor output is treated as active-high and only affects the screen during standby.
  */
-static void presence_clock_task(void *arg)
-{
-    assistant_runtime_t *rt = (assistant_runtime_t *)arg;
+static void presence_clock_task(void *arg) {
+    assistant_runtime_t *rt = (assistant_runtime_t *) arg;
     TickType_t last_motion_tick = 0;
     bool display_owned_by_presence = false;
     bool last_clock_synced = false;
 
     char time_text[24];
     char date_text[32];
-    char last_time_text[24] = { 0 };
-    char last_date_text[32] = { 0 };
+    char last_time_text[24] = {0};
+    char last_date_text[32] = {0};
 
     while (true) {
         vTaskDelay(pdMS_TO_TICKS(PRESENCE_POLL_MS));
@@ -278,9 +275,8 @@ static void presence_clock_task(void *arg)
         bool should_redraw = !display_owned_by_presence || clock_synced != last_clock_synced;
 
         if (clock_synced) {
-            should_redraw = should_redraw ||
-                            strcmp(time_text, last_time_text) != 0 ||
-                            strcmp(date_text, last_date_text) != 0;
+            should_redraw =
+                should_redraw || strcmp(time_text, last_time_text) != 0 || strcmp(date_text, last_date_text) != 0;
         }
 
         if (should_redraw) {
@@ -305,9 +301,8 @@ static void presence_clock_task(void *arg)
  * @return This task does not return.
  * @note The watchdog exists to recover from stuck listening, working, or completed states.
  */
-static void assistant_session_timeout_task(void *arg)
-{
-    assistant_runtime_t *rt = (assistant_runtime_t *)arg;
+static void assistant_session_timeout_task(void *arg) {
+    assistant_runtime_t *rt = (assistant_runtime_t *) arg;
 
     while (true) {
         vTaskDelay(pdMS_TO_TICKS(ASSISTANT_WATCHDOG_POLL_MS));
@@ -320,20 +315,17 @@ static void assistant_session_timeout_task(void *arg)
         TickType_t elapsed_ms = pdTICKS_TO_MS(now - rt->assistant_awake_tick);
         TickType_t stalled_ms = rt->speech_progress_tick == 0 ? 0 : pdTICKS_TO_MS(now - rt->speech_progress_tick);
 
-        if (rt->assistant_stage == ASSISTANT_STAGE_LISTENING &&
-            rt->speech_progress_tick != 0 &&
+        if (rt->assistant_stage == ASSISTANT_STAGE_LISTENING && rt->speech_progress_tick != 0 &&
             stalled_ms >= ASSISTANT_LISTENING_STALL_TIMEOUT_MS) {
             ESP_LOGE(TAG,
                      "Speech pipeline stalled in %s for %lu ms; restarting",
                      assistant_stage_name(rt->assistant_stage),
-                     (unsigned long)stalled_ms);
+                     (unsigned long) stalled_ms);
             esp_restart();
         }
 
-        if (assistant_session_timed_out(rt->assistant_awake,
-                                        rt->assistant_awake_tick != 0,
-                                        elapsed_ms,
-                                        ASSISTANT_SESSION_TIMEOUT_MS)) {
+        if (assistant_session_timed_out(
+                rt->assistant_awake, rt->assistant_awake_tick != 0, elapsed_ms, ASSISTANT_SESSION_TIMEOUT_MS)) {
             if (rt->assistant_stage == ASSISTANT_STAGE_EXECUTING) {
                 if (!rt->execution_timeout_pending) {
                     rt->execution_timeout_pending = true;
@@ -369,15 +361,13 @@ static void assistant_session_timeout_task(void *arg)
     }
 }
 
-
 /**
  * @brief Initialize the speech models and audio front end used by the assistant.
  * @param rt Shared assistant runtime state that receives initialized model and AFE handles.
  * @return ESP_OK on success, or an ESP error code if models or AFE setup fail.
  * @note This selects the enabled WakeNet and MultiNet models from the ESP-SR model partition.
  */
-static esp_err_t init_models(assistant_runtime_t *rt)
-{
+static esp_err_t init_models(assistant_runtime_t *rt) {
     srmodel_list_t *models = esp_srmodel_init("model");
     if (models == NULL || models->num == 0) {
         ESP_LOGE(TAG, "No speech models found in the 'model' partition");
@@ -454,8 +444,7 @@ static esp_err_t init_models(assistant_runtime_t *rt)
  * @return This function does not return a value.
  * @note Audio is paused during command execution so the AFE ring buffer does not overflow.
  */
-static void audio_feed_set_paused(assistant_runtime_t *rt, bool paused)
-{
+static void audio_feed_set_paused(assistant_runtime_t *rt, bool paused) {
     rt->pause_audio_feed = paused;
 }
 
@@ -465,12 +454,11 @@ static void audio_feed_set_paused(assistant_runtime_t *rt, bool paused)
  * @return This task does not return.
  * @note Feed failures are logged and retried without terminating the task.
  */
-static void audio_feed_task(void *arg)
-{
-    assistant_runtime_t *rt = (assistant_runtime_t *)arg;
+static void audio_feed_task(void *arg) {
+    assistant_runtime_t *rt = (assistant_runtime_t *) arg;
     const int feed_chunks = rt->afe_handle->get_feed_chunksize(rt->afe_data);
     const int feed_channels = rt->afe_handle->get_feed_channel_num(rt->afe_data);
-    const size_t feed_samples = (size_t)feed_chunks * (size_t)feed_channels;
+    const size_t feed_samples = (size_t) feed_chunks * (size_t) feed_channels;
     const size_t feed_bytes = feed_samples * sizeof(int16_t);
 
     int16_t *feed_buffer = heap_caps_malloc(feed_bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
@@ -479,8 +467,11 @@ static void audio_feed_task(void *arg)
     }
     assert(feed_buffer != NULL);
 
-    ESP_LOGI(TAG, "Starting audio feed: wake word=%s, feed_chunks=%d, feed_channels=%d",
-             WAKE_WORD, feed_chunks, feed_channels);
+    ESP_LOGI(TAG,
+             "Starting audio feed: wake word=%s, feed_chunks=%d, feed_channels=%d",
+             WAKE_WORD,
+             feed_chunks,
+             feed_channels);
 
     while (true) {
         if (rt->pause_audio_feed) {
@@ -525,9 +516,8 @@ static void audio_feed_task(void *arg)
  * @return This task does not return.
  * @note This task handles wake word detection, command timeout recovery, and command execution.
  */
-static void speech_detect_task(void *arg)
-{
-    assistant_runtime_t *rt = (assistant_runtime_t *)arg;
+static void speech_detect_task(void *arg) {
+    assistant_runtime_t *rt = (assistant_runtime_t *) arg;
     TickType_t wake_tick = 0;
     int fetch_failures = 0;
 
@@ -568,13 +558,10 @@ static void speech_detect_task(void *arg)
         }
 
         TickType_t elapsed_ms = pdTICKS_TO_MS(xTaskGetTickCount() - wake_tick);
-        assistant_listen_step_t listen_step = assistant_step_for_multinet(elapsed_ms,
-                                                                          COMMAND_WINDOW_MS,
-                                                                          COMMAND_MIN_LISTEN_MS,
-                                                                          ASSISTANT_MN_STATE_DETECTING,
-                                                                          true);
+        assistant_listen_step_t listen_step = assistant_step_for_multinet(
+            elapsed_ms, COMMAND_WINDOW_MS, COMMAND_MIN_LISTEN_MS, ASSISTANT_MN_STATE_DETECTING, true);
         if (listen_step == ASSISTANT_LISTEN_STEP_RECOVER_COMMAND_TIMEOUT) {
-            ESP_LOGW(TAG, "Forcing standby after %lu ms without a final command state", (unsigned long)elapsed_ms);
+            ESP_LOGW(TAG, "Forcing standby after %lu ms without a final command state", (unsigned long) elapsed_ms);
             show_status_then_return_to_standby(rt, UI_STATUS_ERROR, "Command timeout", STATUS_HOLD_TIME);
             continue;
         }
@@ -583,29 +570,27 @@ static void speech_detect_task(void *arg)
         listen_step = assistant_step_for_multinet(elapsed_ms,
                                                   COMMAND_WINDOW_MS,
                                                   COMMAND_MIN_LISTEN_MS,
-                                                  (mn_state == ESP_MN_STATE_DETECTING) ? ASSISTANT_MN_STATE_DETECTING
-                                                                                       : (mn_state == ESP_MN_STATE_DETECTED)
-                                                                                             ? ASSISTANT_MN_STATE_DETECTED
-                                                                                             : (mn_state == ESP_MN_STATE_TIMEOUT)
-                                                                                                   ? ASSISTANT_MN_STATE_TIMEOUT
-                                                                                                   : ASSISTANT_MN_STATE_OTHER,
+                                                  (mn_state == ESP_MN_STATE_DETECTING)  ? ASSISTANT_MN_STATE_DETECTING
+                                                  : (mn_state == ESP_MN_STATE_DETECTED) ? ASSISTANT_MN_STATE_DETECTED
+                                                  : (mn_state == ESP_MN_STATE_TIMEOUT)  ? ASSISTANT_MN_STATE_TIMEOUT
+                                                                                        : ASSISTANT_MN_STATE_OTHER,
                                                   true);
         if (listen_step == ASSISTANT_LISTEN_STEP_CONTINUE && mn_state == ESP_MN_STATE_DETECTING) {
             continue;
         }
 
         if (listen_step == ASSISTANT_LISTEN_STEP_IGNORE_EARLY_TIMEOUT) {
-            ESP_LOGI(TAG, "Ignoring early timeout at %lu ms after wake word", (unsigned long)elapsed_ms);
+            ESP_LOGI(TAG, "Ignoring early timeout at %lu ms after wake word", (unsigned long) elapsed_ms);
             continue;
         }
         if (listen_step == ASSISTANT_LISTEN_STEP_RECOVER_NO_COMMAND) {
-            ESP_LOGI(TAG, "Command window timed out after wake word at %lu ms", (unsigned long)elapsed_ms);
+            ESP_LOGI(TAG, "Command window timed out after wake word at %lu ms", (unsigned long) elapsed_ms);
             show_status_then_return_to_standby(rt, UI_STATUS_ERROR, "No command heard", STATUS_HOLD_TIME);
             continue;
         }
 
         if (mn_state != ESP_MN_STATE_DETECTED) {
-            ESP_LOGI(TAG, "Ignoring speech state %d at %lu ms after wake word", mn_state, (unsigned long)elapsed_ms);
+            ESP_LOGI(TAG, "Ignoring speech state %d at %lu ms after wake word", mn_state, (unsigned long) elapsed_ms);
             continue;
         }
 
@@ -624,16 +609,14 @@ static void speech_detect_task(void *arg)
         const int command_id = mn_result->command_id[0];
         const float command_prob = mn_result->prob[0];
         char command_text_buffer[96];
-        const char *command_text = assistant_command_text(command_id,
-                                                          rt->groups,
-                                                          rt->group_count,
-                                                          command_text_buffer,
-                                                          sizeof(command_text_buffer));
-        ESP_LOGI(TAG, "Detected command_id=%d text=\"%s\" prob=%.3f elapsed_ms=%lu",
+        const char *command_text = assistant_command_text(
+            command_id, rt->groups, rt->group_count, command_text_buffer, sizeof(command_text_buffer));
+        ESP_LOGI(TAG,
+                 "Detected command_id=%d text=\"%s\" prob=%.3f elapsed_ms=%lu",
                  command_id,
                  mn_result->string,
                  command_prob,
-                 (unsigned long)elapsed_ms);
+                 (unsigned long) elapsed_ms);
 
         audio_feed_set_paused(rt, true);
         rt->assistant_stage = ASSISTANT_STAGE_EXECUTING;
@@ -648,7 +631,7 @@ static void speech_detect_task(void *arg)
         ESP_LOGI(TAG, "Starting command execution for id=%d label=\"%s\"", command_id, command_text);
 
         esp_err_t action_err = ESP_FAIL;
-        char action_detail[WEATHER_DETAIL_TEXT_LEN] = { 0 };
+        char action_detail[WEATHER_DETAIL_TEXT_LEN] = {0};
         TickType_t hold_time = STATUS_HOLD_TIME;
         assistant_command_dispatch_t dispatch;
         assistant_command_resolve(command_id, rt->group_count, &dispatch);
@@ -660,17 +643,14 @@ static void speech_detect_task(void *arg)
                                                          ASSISTANT_CMD_WEATHER_TOMORROW,
                                                          ASSISTANT_CMD_GROUP_BASE);
             if (action_err != ESP_OK) {
-                format_hue_request_error_detail("Hue sync failed",
-                                                action_err,
-                                                action_detail,
-                                                sizeof(action_detail));
+                format_hue_request_error_detail("Hue sync failed", action_err, action_detail, sizeof(action_detail));
             }
         } else if (dispatch.type == ASSISTANT_COMMAND_ACTION_WEATHER_TODAY ||
                    dispatch.type == ASSISTANT_COMMAND_ACTION_WEATHER_TOMORROW) {
-            weather_report_t report = { 0 };
+            weather_report_t report = {0};
             action_err = (dispatch.type == ASSISTANT_COMMAND_ACTION_WEATHER_TODAY)
-                             ? weather_client_fetch_today(&report)
-                             : weather_client_fetch_tomorrow(&report);
+                           ? weather_client_fetch_today(&report)
+                           : weather_client_fetch_tomorrow(&report);
             if (action_err == ESP_OK) {
                 weather_format_detail(&report, action_detail, sizeof(action_detail));
                 hold_time = WEATHER_STATUS_HOLD_TIME;
@@ -682,10 +662,7 @@ static void speech_detect_task(void *arg)
         } else if (dispatch.type == ASSISTANT_COMMAND_ACTION_HUE_GROUP) {
             action_err = hue_client_set_group_by_id(rt->groups[dispatch.group_index].id, dispatch.on);
             if (action_err != ESP_OK) {
-                format_hue_request_error_detail("Hue command failed",
-                                                action_err,
-                                                action_detail,
-                                                sizeof(action_detail));
+                format_hue_request_error_detail("Hue command failed", action_err, action_detail, sizeof(action_detail));
             }
         } else {
             if (dispatch.type == ASSISTANT_COMMAND_ACTION_UNKNOWN) {
@@ -717,7 +694,7 @@ static void speech_detect_task(void *arg)
                  "Finished command execution for id=%d status=%s elapsed_ms=%lu",
                  command_id,
                  action_err == ESP_OK ? "ok" : esp_err_to_name(action_err),
-                 (unsigned long)pdTICKS_TO_MS(xTaskGetTickCount() - execute_start_tick));
+                 (unsigned long) pdTICKS_TO_MS(xTaskGetTickCount() - execute_start_tick));
 
         assistant_diag_finish_command(action_err);
         clear_active_session(rt);
@@ -732,8 +709,7 @@ static void speech_detect_task(void *arg)
  * @return This function does not return a value.
  * @note Boot-time failures use ESP_ERROR_CHECK and will abort startup rather than continue in a broken state.
  */
-void app_main(void)
-{
+void app_main(void) {
     static assistant_runtime_t runtime;
     assistant_runtime_t *rt = &runtime;
     rt->assistant_stage = ASSISTANT_STAGE_STANDBY;
@@ -780,13 +756,12 @@ void app_main(void)
     ESP_ERROR_CHECK(init_models(rt));
 
     ui_status_set(UI_STATUS_BOOTING, "Updating Hue groups");
-    esp_err_t sync_err = (hue_probe_err == ESP_OK)
-                             ? hue_command_runtime_sync_groups(rt,
-                                                               ASSISTANT_CMD_SYNC_GROUPS,
-                                                               ASSISTANT_CMD_WEATHER_TODAY,
-                                                               ASSISTANT_CMD_WEATHER_TOMORROW,
-                                                               ASSISTANT_CMD_GROUP_BASE)
-                             : hue_probe_err;
+    esp_err_t sync_err = (hue_probe_err == ESP_OK) ? hue_command_runtime_sync_groups(rt,
+                                                                                     ASSISTANT_CMD_SYNC_GROUPS,
+                                                                                     ASSISTANT_CMD_WEATHER_TODAY,
+                                                                                     ASSISTANT_CMD_WEATHER_TOMORROW,
+                                                                                     ASSISTANT_CMD_GROUP_BASE)
+                                                   : hue_probe_err;
     if (sync_err != ESP_OK) {
         char hue_detail[WEATHER_DETAIL_TEXT_LEN];
         if (hue_probe_err != ESP_OK) {

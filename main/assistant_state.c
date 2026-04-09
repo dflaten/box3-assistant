@@ -7,8 +7,8 @@
  * @param max_fetch_failures The threshold that triggers recovery.
  * @return The next listen-step action for the assistant state machine.
  */
-assistant_listen_step_t assistant_step_for_missing_fetch(bool assistant_awake, int fetch_failures, int max_fetch_failures)
-{
+assistant_listen_step_t
+assistant_step_for_missing_fetch(bool assistant_awake, int fetch_failures, int max_fetch_failures) {
     if (!assistant_awake) {
         return ASSISTANT_LISTEN_STEP_CONTINUE;
     }
@@ -31,8 +31,7 @@ assistant_listen_step_t assistant_step_for_multinet(uint32_t elapsed_ms,
                                                     uint32_t command_window_ms,
                                                     uint32_t command_min_listen_ms,
                                                     assistant_mn_state_t mn_state,
-                                                    bool have_results)
-{
+                                                    bool have_results) {
     if (elapsed_ms >= command_window_ms) {
         return ASSISTANT_LISTEN_STEP_RECOVER_COMMAND_TIMEOUT;
     }
@@ -66,7 +65,6 @@ assistant_listen_step_t assistant_step_for_multinet(uint32_t elapsed_ms,
 bool assistant_session_timed_out(bool assistant_awake,
                                  bool have_awake_tick,
                                  uint32_t elapsed_ms,
-                                 uint32_t session_timeout_ms)
-{
+                                 uint32_t session_timeout_ms) {
     return assistant_awake && have_awake_tick && elapsed_ms >= session_timeout_ms;
 }

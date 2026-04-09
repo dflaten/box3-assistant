@@ -19,7 +19,8 @@ typedef enum {
     ASSISTANT_MN_STATE_OTHER = 3,
 } assistant_mn_state_t;
 
-assistant_listen_step_t assistant_step_for_missing_fetch(bool assistant_awake, int fetch_failures, int max_fetch_failures);
+assistant_listen_step_t
+assistant_step_for_missing_fetch(bool assistant_awake, int fetch_failures, int max_fetch_failures);
 assistant_listen_step_t assistant_step_for_multinet(uint32_t elapsed_ms,
                                                     uint32_t command_window_ms,
                                                     uint32_t command_min_listen_ms,

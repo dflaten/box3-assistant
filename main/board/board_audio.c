@@ -13,8 +13,7 @@ static const char *TAG = "hue-voice";
  * @return ESP_OK on success, or an ESP error code if initialization or opening fails.
  * @note The microphone is configured for 16 kHz, 16-bit, 2-channel capture.
  */
-esp_err_t board_audio_init_microphone(esp_codec_dev_handle_t *mic_codec)
-{
+esp_err_t board_audio_init_microphone(esp_codec_dev_handle_t *mic_codec) {
     *mic_codec = bsp_audio_codec_microphone_init();
     if (*mic_codec == NULL) {
         ESP_LOGE(TAG, "Failed to initialize BOX-3 microphone codec");

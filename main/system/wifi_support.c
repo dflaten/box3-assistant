@@ -29,8 +29,7 @@ static bool s_wifi_connected;
  * @return This function does not return a value.
  * @note This keeps the STA connection alive after startup so the assistant can recover from AP drops.
  */
-static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
-{
+static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
         esp_wifi_connect();
         return;
@@ -50,7 +49,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
     }
 
     if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
-        const ip_event_got_ip_t *event = (const ip_event_got_ip_t *)event_data;
+        const ip_event_got_ip_t *event = (const ip_event_got_ip_t *) event_data;
         ESP_LOGI(TAG, "Got IP: " IPSTR, IP2STR(&event->ip_info.ip));
         s_retry_num = 0;
         s_wifi_connected = true;
@@ -63,8 +62,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
  * @return ESP_OK on success, or an ESP error code if configuration or connection fails.
  * @note Runtime reconnects after startup are handled by the Wi-Fi event callback.
  */
-esp_err_t wifi_init_sta(void)
-{
+esp_err_t wifi_init_sta(void) {
     if (strlen(CONFIG_HUE_WIFI_SSID) == 0) {
         ESP_LOGE(TAG, "Wi-Fi SSID is empty. Set CONFIG_HUE_WIFI_SSID in menuconfig or sdkconfig.");
         return ESP_ERR_INVALID_STATE;
@@ -82,18 +80,16 @@ esp_err_t wifi_init_sta(void)
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_RETURN_ON_ERROR(esp_wifi_init(&cfg), TAG, "esp_wifi_init failed");
 
-    ESP_RETURN_ON_ERROR(
-        esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL),
-        TAG,
-        "register wifi event handler failed");
-    ESP_RETURN_ON_ERROR(
-        esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_event_handler, NULL),
-        TAG,
-        "register IP event handler failed");
+    ESP_RETURN_ON_ERROR(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &wifi_event_handler, NULL),
+                        TAG,
+                        "register wifi event handler failed");
+    ESP_RETURN_ON_ERROR(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_event_handler, NULL),
+                        TAG,
+                        "register IP event handler failed");
 
-    wifi_config_t wifi_config = { 0 };
-    strlcpy((char *)wifi_config.sta.ssid, CONFIG_HUE_WIFI_SSID, sizeof(wifi_config.sta.ssid));
-    strlcpy((char *)wifi_config.sta.password, CONFIG_HUE_WIFI_PASSWORD, sizeof(wifi_config.sta.password));
+    wifi_config_t wifi_config = {0};
+    strlcpy((char *) wifi_config.sta.ssid, CONFIG_HUE_WIFI_SSID, sizeof(wifi_config.sta.ssid));
+    strlcpy((char *) wifi_config.sta.password, CONFIG_HUE_WIFI_PASSWORD, sizeof(wifi_config.sta.password));
     wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
     wifi_config.sta.pmf_cfg.capable = true;
     wifi_config.sta.pmf_cfg.required = false;
@@ -103,11 +99,7 @@ esp_err_t wifi_init_sta(void)
     ESP_RETURN_ON_ERROR(esp_wifi_start(), TAG, "esp_wifi_start failed");
 
     EventBits_t bits = xEventGroupWaitBits(
-        s_wifi_event_group,
-        WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
-        pdFALSE,
-        pdFALSE,
-        pdMS_TO_TICKS(30000));
+        s_wifi_event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT, pdFALSE, pdFALSE, pdMS_TO_TICKS(30000));
 
     if (bits & WIFI_CONNECTED_BIT) {
         ESP_LOGI(TAG, "Connected to Wi-Fi SSID \"%s\"", CONFIG_HUE_WIFI_SSID);
@@ -118,7 +110,6 @@ esp_err_t wifi_init_sta(void)
     return ESP_ERR_TIMEOUT;
 }
 
-bool wifi_is_connected(void)
-{
+bool wifi_is_connected(void) {
     return s_wifi_connected;
 }
