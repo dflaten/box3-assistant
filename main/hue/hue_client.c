@@ -14,6 +14,7 @@
 #include "assistant_diagnostics.h"
 #include "assistant_runtime.h"
 #include "hue/hue_client.h"
+#include "system/wifi_support.h"
 
 #define HUE_HTTP_TRACE_BODY_SIZE 2048
 
@@ -25,6 +26,16 @@ typedef struct {
 
 static const char *TAG = "hue-voice";
 static esp_http_client_handle_t s_active_client;
+
+/**
+ * @brief Check whether a Hue client error represents a connectivity problem.
+ * @param err The ESP error code returned by a Hue client operation.
+ * @return True when the error indicates Wi-Fi or TCP connectivity failure, otherwise false.
+ */
+bool hue_client_error_is_connectivity(esp_err_t err)
+{
+    return err == ESP_ERR_HTTP_CONNECT || err == ESP_ERR_TIMEOUT || err == ESP_ERR_INVALID_STATE;
+}
 
 /**
  * @brief Collect HTTP response body bytes for Hue requests.
@@ -154,6 +165,14 @@ static esp_err_t hue_http_perform(const char *url,
                                   hue_http_trace_t *trace,
                                   int *out_status)
 {
+    if (!wifi_is_connected()) {
+        ESP_LOGW(TAG, "Skipping Hue HTTP request because Wi-Fi is not connected");
+        if (out_status != NULL) {
+            *out_status = 0;
+        }
+        return ESP_ERR_INVALID_STATE;
+    }
+
     esp_http_client_config_t config = {
         .url = url,
         .method = method,
@@ -227,6 +246,57 @@ static esp_err_t hue_http_perform(const char *url,
     esp_http_client_cleanup(client);
     s_active_client = NULL;
     return err;
+}
+
+/**
+ * @brief Probe the configured Hue bridge and verify the response looks like a Hue bridge.
+ * @return ESP_OK when the bridge is reachable and returns a valid Hue config payload, or an ESP error code otherwise.
+ */
+esp_err_t hue_client_probe_bridge(void)
+{
+    if (strlen(CONFIG_HUE_BRIDGE_IP) == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    char url[96];
+    snprintf(url, sizeof(url), "http://%s/api/config", CONFIG_HUE_BRIDGE_IP);
+
+    hue_http_trace_t trace = { 0 };
+    int status = 0;
+    ESP_RETURN_ON_ERROR(hue_http_trace_init(&trace), TAG, "Failed to allocate HTTP trace buffer");
+
+    ESP_LOGI(TAG, "Probing Hue bridge at %s", CONFIG_HUE_BRIDGE_IP);
+    esp_err_t err = hue_http_perform(url, HTTP_METHOD_GET, NULL, &trace, &status);
+    if (err != ESP_OK) {
+        hue_http_trace_deinit(&trace);
+        return err;
+    }
+    if (status < 200 || status >= 300) {
+        ESP_LOGW(TAG, "Hue bridge probe returned HTTP %d", status);
+        hue_http_trace_deinit(&trace);
+        return ESP_FAIL;
+    }
+
+    cJSON *root = cJSON_Parse(trace.body);
+    if (!cJSON_IsObject(root)) {
+        cJSON_Delete(root);
+        hue_http_trace_deinit(&trace);
+        ESP_LOGW(TAG, "Hue bridge probe returned unexpected payload");
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    cJSON *bridgeid = cJSON_GetObjectItemCaseSensitive(root, "bridgeid");
+    cJSON *name = cJSON_GetObjectItemCaseSensitive(root, "name");
+    bool valid_bridge = cJSON_IsString(bridgeid) || cJSON_IsString(name);
+    cJSON_Delete(root);
+    hue_http_trace_deinit(&trace);
+
+    if (!valid_bridge) {
+        ESP_LOGW(TAG, "Hue bridge probe response did not look like a Hue bridge");
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    return ESP_OK;
 }
 
 /**

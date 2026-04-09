@@ -53,5 +53,7 @@ cmake --build build --target unit-tests
 - Run `get_idf` in each new shell before using `idf.py`.
 - If `idf.py` is not found, the environment is not active yet.
 - This repo now uses a custom `partitions.csv`, so avoid deleting it when cleaning up build files.
+- Add documentation comments for new methods using the same Doxygen-style pattern already established in the codebase.
+- Add or extend unit tests for newly added methods when they contain host-testable logic.
 - Run the host-side unit tests after changes to pure logic or formatting code, especially `assistant_state.c`, `assistant_command_text.c`, `weather_format.c`, or the unit-test harness itself.
 - Run `idf.py build` after changes that affect firmware integration, ESP-IDF-facing code, task orchestration, or component wiring.

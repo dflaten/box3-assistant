@@ -58,12 +58,15 @@ static const char *TAG = "hue-voice";
 static const char *WAKE_WORD = "Hi ESP";
 static const TickType_t STATUS_HOLD_TIME = pdMS_TO_TICKS(1200);
 static const TickType_t WEATHER_STATUS_HOLD_TIME = pdMS_TO_TICKS(WEATHER_STATUS_HOLD_MS);
+static const TickType_t BRIDGE_ERROR_HOLD_TIME = pdMS_TO_TICKS(2500);
 
 static void audio_feed_set_paused(assistant_runtime_t *rt, bool paused);
 static void show_status_then_return_to_standby(assistant_runtime_t *rt, ui_status_state_t state, const char *detail, TickType_t hold_time);
 static void clear_active_session(assistant_runtime_t *rt);
 static esp_err_t init_presence_sensor(void);
 static void presence_clock_task(void *arg);
+static void format_hue_probe_error_detail(esp_err_t probe_err, char *detail, size_t detail_size);
+static void format_hue_request_error_detail(const char *fallback, esp_err_t request_err, char *detail, size_t detail_size);
 
 static const char *assistant_stage_name(assistant_stage_t stage)
 {
@@ -76,6 +79,63 @@ static const char *assistant_stage_name(assistant_stage_t stage)
         return "executing";
     default:
         return "unknown";
+    }
+}
+
+/**
+ * @brief Convert a Hue bridge probe failure into a short UI detail message.
+ * @param probe_err The error returned by the Hue bridge probe.
+ * @param detail Destination buffer for the user-facing status text.
+ * @param detail_size Size of the destination buffer in bytes.
+ * @return This function does not return a value.
+ */
+static void format_hue_probe_error_detail(esp_err_t probe_err, char *detail, size_t detail_size)
+{
+    if (detail == NULL || detail_size == 0) {
+        return;
+    }
+
+    if (!wifi_is_connected() || probe_err == ESP_ERR_INVALID_STATE) {
+        snprintf(detail, detail_size, "Hue Wi-Fi disconnected");
+    } else if (hue_client_error_is_connectivity(probe_err) || probe_err == ESP_ERR_NOT_FOUND) {
+        snprintf(detail, detail_size, "Check Hue bridge IP");
+    } else {
+        snprintf(detail, detail_size, "Hue bridge unavailable");
+    }
+}
+
+/**
+ * @brief Convert a Hue command failure into a short UI detail message.
+ * @param fallback Default message to use when the bridge itself is reachable.
+ * @param request_err The error returned by the Hue command request.
+ * @param detail Destination buffer for the user-facing status text.
+ * @param detail_size Size of the destination buffer in bytes.
+ * @return This function does not return a value.
+ * @note This re-probes the bridge so the UI can distinguish bad bridge addressing from a command-specific failure.
+ */
+static void format_hue_request_error_detail(const char *fallback,
+                                            esp_err_t request_err,
+                                            char *detail,
+                                            size_t detail_size)
+{
+    if (detail == NULL || detail_size == 0) {
+        return;
+    }
+
+    if (!wifi_is_connected()) {
+        format_hue_probe_error_detail(ESP_ERR_INVALID_STATE, detail, detail_size);
+        return;
+    }
+
+    esp_err_t probe_err = hue_client_probe_bridge();
+    if (probe_err != ESP_OK) {
+        format_hue_probe_error_detail(probe_err, detail, detail_size);
+        return;
+    }
+
+    snprintf(detail, detail_size, "%s", fallback != NULL ? fallback : "Hue command failed");
+    if (hue_client_error_is_connectivity(request_err)) {
+        ESP_LOGW(TAG, "Hue request failed even though bridge probe succeeded: %s", esp_err_to_name(request_err));
     }
 }
 
@@ -599,6 +659,12 @@ static void speech_detect_task(void *arg)
                                                          ASSISTANT_CMD_WEATHER_TODAY,
                                                          ASSISTANT_CMD_WEATHER_TOMORROW,
                                                          ASSISTANT_CMD_GROUP_BASE);
+            if (action_err != ESP_OK) {
+                format_hue_request_error_detail("Hue sync failed",
+                                                action_err,
+                                                action_detail,
+                                                sizeof(action_detail));
+            }
         } else if (dispatch.type == ASSISTANT_COMMAND_ACTION_WEATHER_TODAY ||
                    dispatch.type == ASSISTANT_COMMAND_ACTION_WEATHER_TOMORROW) {
             weather_report_t report = { 0 };
@@ -615,6 +681,12 @@ static void speech_detect_task(void *arg)
             }
         } else if (dispatch.type == ASSISTANT_COMMAND_ACTION_HUE_GROUP) {
             action_err = hue_client_set_group_by_id(rt->groups[dispatch.group_index].id, dispatch.on);
+            if (action_err != ESP_OK) {
+                format_hue_request_error_detail("Hue command failed",
+                                                action_err,
+                                                action_detail,
+                                                sizeof(action_detail));
+            }
         } else {
             if (dispatch.type == ASSISTANT_COMMAND_ACTION_UNKNOWN) {
                 ESP_LOGW(TAG, "Unhandled command id %d", command_id);
@@ -694,17 +766,37 @@ void app_main(void)
         ESP_LOGW(TAG, "Time sync initialization failed: %s", esp_err_to_name(time_err));
     }
 
+    ui_status_set(UI_STATUS_BOOTING, "Checking Hue bridge");
+    esp_err_t hue_probe_err = hue_client_probe_bridge();
+    if (hue_probe_err != ESP_OK) {
+        char hue_detail[WEATHER_DETAIL_TEXT_LEN];
+        format_hue_probe_error_detail(hue_probe_err, hue_detail, sizeof(hue_detail));
+        ESP_LOGW(TAG, "Hue bridge probe failed: %s", esp_err_to_name(hue_probe_err));
+        ui_status_set(UI_STATUS_ERROR, hue_detail);
+        vTaskDelay(BRIDGE_ERROR_HOLD_TIME);
+    }
+
     ui_status_set(UI_STATUS_BOOTING, "Loading speech models");
     ESP_ERROR_CHECK(init_models(rt));
 
     ui_status_set(UI_STATUS_BOOTING, "Updating Hue groups");
-    esp_err_t sync_err = hue_command_runtime_sync_groups(rt,
-                                                         ASSISTANT_CMD_SYNC_GROUPS,
-                                                         ASSISTANT_CMD_WEATHER_TODAY,
-                                                         ASSISTANT_CMD_WEATHER_TOMORROW,
-                                                         ASSISTANT_CMD_GROUP_BASE);
+    esp_err_t sync_err = (hue_probe_err == ESP_OK)
+                             ? hue_command_runtime_sync_groups(rt,
+                                                               ASSISTANT_CMD_SYNC_GROUPS,
+                                                               ASSISTANT_CMD_WEATHER_TODAY,
+                                                               ASSISTANT_CMD_WEATHER_TOMORROW,
+                                                               ASSISTANT_CMD_GROUP_BASE)
+                             : hue_probe_err;
     if (sync_err != ESP_OK) {
+        char hue_detail[WEATHER_DETAIL_TEXT_LEN];
+        if (hue_probe_err != ESP_OK) {
+            format_hue_probe_error_detail(hue_probe_err, hue_detail, sizeof(hue_detail));
+        } else {
+            format_hue_request_error_detail("Hue sync failed", sync_err, hue_detail, sizeof(hue_detail));
+        }
         ESP_LOGW(TAG, "Boot-time Hue sync failed: %s", esp_err_to_name(sync_err));
+        ui_status_set(UI_STATUS_ERROR, hue_detail);
+        vTaskDelay(BRIDGE_ERROR_HOLD_TIME);
         ESP_ERROR_CHECK(hue_command_runtime_rebuild(rt,
                                                     ASSISTANT_CMD_SYNC_GROUPS,
                                                     ASSISTANT_CMD_WEATHER_TODAY,
