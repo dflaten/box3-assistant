@@ -48,6 +48,8 @@
 #define ASSISTANT_LISTENING_STALL_TIMEOUT_MS 12000
 #define ASSISTANT_WATCHDOG_POLL_MS           1000
 #define ASSISTANT_EXECUTION_CANCEL_GRACE_MS  5000
+#define ASSISTANT_TASK_HEARTBEAT_TIMEOUT_MS  15000
+#define ASSISTANT_HEARTBEAT_SLEEP_SLICE_MS   250
 #define PRESENCE_TIMEOUT_MS                  30000
 #define PRESENCE_POLL_MS                     250
 #define PRESENCE_TASK_STACK                  4096
@@ -61,6 +63,7 @@ static const TickType_t WEATHER_STATUS_HOLD_TIME = pdMS_TO_TICKS(WEATHER_STATUS_
 static const TickType_t BRIDGE_ERROR_HOLD_TIME = pdMS_TO_TICKS(2500);
 
 static void audio_feed_set_paused(assistant_runtime_t *rt, bool paused);
+static void sleep_with_speech_heartbeat(assistant_runtime_t *rt, TickType_t duration);
 static void show_status_then_return_to_standby(assistant_runtime_t *rt,
                                                ui_status_state_t state,
                                                const char *detail,
@@ -171,6 +174,26 @@ static void return_to_standby(assistant_runtime_t *rt) {
 }
 
 /**
+ * @brief Sleep for a bounded duration while continuing to publish speech-task heartbeats.
+ * @param rt Shared assistant runtime state whose speech heartbeat will be updated.
+ * @param duration Total delay duration to wait.
+ * @return This function does not return a value.
+ * @note Long UI hold periods should use this helper so the watchdog can distinguish intentional sleeps from stalls.
+ */
+static void sleep_with_speech_heartbeat(assistant_runtime_t *rt, TickType_t duration) {
+    TickType_t remaining = duration;
+
+    while (remaining > 0) {
+        TickType_t slice = remaining > pdMS_TO_TICKS(ASSISTANT_HEARTBEAT_SLEEP_SLICE_MS)
+                             ? pdMS_TO_TICKS(ASSISTANT_HEARTBEAT_SLEEP_SLICE_MS)
+                             : remaining;
+        rt->speech_detect_heartbeat_tick = xTaskGetTickCount();
+        vTaskDelay(slice);
+        remaining -= slice;
+    }
+}
+
+/**
  * @brief Show a transient UI status while audio is paused, then restore standby mode.
  * @param rt Shared assistant runtime state to pause and reset.
  * @param state The status state to show during the hold period.
@@ -185,7 +208,7 @@ static void show_status_then_return_to_standby(assistant_runtime_t *rt,
                                                TickType_t hold_time) {
     audio_feed_set_paused(rt, true);
     ui_status_set(state, detail);
-    vTaskDelay(hold_time);
+    sleep_with_speech_heartbeat(rt, hold_time);
     return_to_standby(rt);
     ui_status_set(UI_STATUS_READY, NULL);
 }
@@ -241,6 +264,7 @@ static void presence_clock_task(void *arg) {
     char last_date_text[32] = {0};
 
     while (true) {
+        rt->presence_clock_heartbeat_tick = xTaskGetTickCount();
         vTaskDelay(pdMS_TO_TICKS(PRESENCE_POLL_MS));
 
         const TickType_t now = xTaskGetTickCount();
@@ -307,11 +331,41 @@ static void assistant_session_timeout_task(void *arg) {
     while (true) {
         vTaskDelay(pdMS_TO_TICKS(ASSISTANT_WATCHDOG_POLL_MS));
 
+        TickType_t now = xTaskGetTickCount();
+        uint32_t audio_stalled_ms =
+            rt->audio_feed_heartbeat_tick == 0 ? 0 : (uint32_t) pdTICKS_TO_MS(now - rt->audio_feed_heartbeat_tick);
+        uint32_t speech_detect_stalled_ms = rt->speech_detect_heartbeat_tick == 0
+                                              ? 0
+                                              : (uint32_t) pdTICKS_TO_MS(now - rt->speech_detect_heartbeat_tick);
+        uint32_t presence_clock_stalled_ms = rt->presence_clock_heartbeat_tick == 0
+                                               ? 0
+                                               : (uint32_t) pdTICKS_TO_MS(now - rt->presence_clock_heartbeat_tick);
+
+        if (assistant_task_timed_out(
+                rt->audio_feed_heartbeat_tick != 0, audio_stalled_ms, ASSISTANT_TASK_HEARTBEAT_TIMEOUT_MS)) {
+            ESP_LOGE(TAG, "Audio feed task heartbeat stalled for %lu ms; restarting", (unsigned long) audio_stalled_ms);
+            esp_restart();
+        }
+        if (assistant_task_timed_out(
+                rt->speech_detect_heartbeat_tick != 0, speech_detect_stalled_ms, ASSISTANT_TASK_HEARTBEAT_TIMEOUT_MS)) {
+            ESP_LOGE(TAG,
+                     "Speech detect task heartbeat stalled for %lu ms; restarting",
+                     (unsigned long) speech_detect_stalled_ms);
+            esp_restart();
+        }
+        if (assistant_task_timed_out(rt->presence_clock_heartbeat_tick != 0,
+                                     presence_clock_stalled_ms,
+                                     ASSISTANT_TASK_HEARTBEAT_TIMEOUT_MS)) {
+            ESP_LOGE(TAG,
+                     "Presence clock task heartbeat stalled for %lu ms; restarting",
+                     (unsigned long) presence_clock_stalled_ms);
+            esp_restart();
+        }
+
         if (!rt->assistant_awake || rt->assistant_awake_tick == 0) {
             continue;
         }
 
-        TickType_t now = xTaskGetTickCount();
         TickType_t elapsed_ms = pdTICKS_TO_MS(now - rt->assistant_awake_tick);
         TickType_t stalled_ms = rt->speech_progress_tick == 0 ? 0 : pdTICKS_TO_MS(now - rt->speech_progress_tick);
 
@@ -474,6 +528,7 @@ static void audio_feed_task(void *arg) {
              feed_channels);
 
     while (true) {
+        rt->audio_feed_heartbeat_tick = xTaskGetTickCount();
         if (rt->pause_audio_feed) {
             rt->audio_feed_busy = false;
             rt->audio_feed_paused = true;
@@ -524,6 +579,7 @@ static void speech_detect_task(void *arg) {
     ESP_LOGI(TAG, "Starting speech detect task");
 
     while (true) {
+        rt->speech_detect_heartbeat_tick = xTaskGetTickCount();
         rt->speech_progress_tick = xTaskGetTickCount();
         afe_fetch_result_t *afe_result = rt->afe_handle->fetch(rt->afe_data);
         if (afe_result == NULL || afe_result->data == NULL) {
@@ -698,7 +754,7 @@ static void speech_detect_task(void *arg) {
 
         assistant_diag_finish_command(action_err);
         clear_active_session(rt);
-        vTaskDelay(hold_time);
+        sleep_with_speech_heartbeat(rt, hold_time);
         return_to_standby(rt);
         ui_status_set(UI_STATUS_READY, NULL);
     }
@@ -712,8 +768,12 @@ static void speech_detect_task(void *arg) {
 void app_main(void) {
     static assistant_runtime_t runtime;
     assistant_runtime_t *rt = &runtime;
+    TickType_t startup_tick = xTaskGetTickCount();
     rt->assistant_stage = ASSISTANT_STAGE_STANDBY;
-    rt->speech_progress_tick = xTaskGetTickCount();
+    rt->audio_feed_heartbeat_tick = startup_tick;
+    rt->speech_detect_heartbeat_tick = startup_tick;
+    rt->presence_clock_heartbeat_tick = startup_tick;
+    rt->speech_progress_tick = startup_tick;
 
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {

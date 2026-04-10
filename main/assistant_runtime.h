@@ -36,6 +36,12 @@ typedef struct {
     volatile bool audio_feed_paused;
     /** Tick count captured when the current assistant session began. */
     TickType_t assistant_awake_tick;
+    /** Tick count updated by the audio feed task to prove it is still running. */
+    volatile TickType_t audio_feed_heartbeat_tick;
+    /** Tick count updated by the speech detect task to prove it is still running. */
+    volatile TickType_t speech_detect_heartbeat_tick;
+    /** Tick count updated by the presence clock task to prove it is still running. */
+    volatile TickType_t presence_clock_heartbeat_tick;
     /** Tick count updated whenever the speech pipeline makes forward progress. */
     volatile TickType_t speech_progress_tick;
     /** High-level stage used for watchdog diagnostics. */

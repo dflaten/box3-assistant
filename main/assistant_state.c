@@ -55,6 +55,17 @@ assistant_listen_step_t assistant_step_for_multinet(uint32_t elapsed_ms,
 }
 
 /**
+ * @brief Check whether a task heartbeat has exceeded its timeout.
+ * @param have_heartbeat_tick True when a valid heartbeat timestamp is available.
+ * @param stalled_ms Milliseconds elapsed since the last heartbeat update.
+ * @param timeout_ms Maximum allowed time between heartbeat updates.
+ * @return True if the task heartbeat has timed out, otherwise false.
+ */
+bool assistant_task_timed_out(bool have_heartbeat_tick, uint32_t stalled_ms, uint32_t timeout_ms) {
+    return have_heartbeat_tick && stalled_ms >= timeout_ms;
+}
+
+/**
  * @brief Check whether the current assistant session has exceeded its timeout.
  * @param assistant_awake True when the assistant is currently in an active session.
  * @param have_awake_tick True when a valid awake timestamp is available.

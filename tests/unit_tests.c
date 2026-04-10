@@ -68,6 +68,13 @@ static bool test_session_timeout_forces_recovery(void) {
     return true;
 }
 
+static bool test_task_timeout_requires_heartbeat_and_threshold(void) {
+    ASSERT_TRUE(!assistant_task_timed_out(false, 30000, 30000));
+    ASSERT_TRUE(!assistant_task_timed_out(true, 29999, 30000));
+    ASSERT_TRUE(assistant_task_timed_out(true, 30000, 30000));
+    return true;
+}
+
 static bool test_command_text_labels_builtin_and_hue_commands(void) {
     hue_group_t groups[] = {
         {.id = "1", .name = "kitchen"},
@@ -202,6 +209,7 @@ int main(void) {
     run_test("timeout_rules_match_listening_behavior", test_timeout_rules_match_listening_behavior);
     run_test("detected_without_results_recovers", test_detected_without_results_recovers);
     run_test("session_timeout_forces_recovery", test_session_timeout_forces_recovery);
+    run_test("task_timeout_requires_heartbeat_and_threshold", test_task_timeout_requires_heartbeat_and_threshold);
     run_test("command_text_labels_builtin_and_hue_commands", test_command_text_labels_builtin_and_hue_commands);
     run_test("command_text_unknown_for_invalid_ids", test_command_text_unknown_for_invalid_ids);
     run_test("command_dispatch_resolves_builtin_and_hue_actions",

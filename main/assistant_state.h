@@ -26,6 +26,7 @@ assistant_listen_step_t assistant_step_for_multinet(uint32_t elapsed_ms,
                                                     uint32_t command_min_listen_ms,
                                                     assistant_mn_state_t mn_state,
                                                     bool have_results);
+bool assistant_task_timed_out(bool have_heartbeat_tick, uint32_t stalled_ms, uint32_t timeout_ms);
 bool assistant_session_timed_out(bool assistant_awake,
                                  bool have_awake_tick,
                                  uint32_t elapsed_ms,
