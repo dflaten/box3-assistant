@@ -3,6 +3,7 @@
 
 CONFIG_HUE_WIFI_SSID="your-ssid"
 CONFIG_HUE_WIFI_PASSWORD="your-password"
+# Optional seed/fallback. The firmware now discovers and caches the Hue bridge IP automatically.
 CONFIG_HUE_BRIDGE_IP="192.168.68.60"
 CONFIG_HUE_BRIDGE_API_KEY="your-hue-api-key"
 CONFIG_HUE_BRIDGE_GROUP_ID="2"

@@ -11,11 +11,18 @@ cc -std=c11 -Wall -Wextra -Werror \
     -I"${ROOT_DIR}/main/commands" \
     -I"${ROOT_DIR}/main/weather" \
     -I"${ROOT_DIR}/main/hue" \
-    "${ROOT_DIR}/tests/unit_tests.c" \
+    -I"${ROOT_DIR}/tests" \
+    "${ROOT_DIR}/tests/test_main.c" \
+    "${ROOT_DIR}/tests/test_assistant_state.c" \
+    "${ROOT_DIR}/tests/test_command_dispatch.c" \
+    "${ROOT_DIR}/tests/test_command_text.c" \
+    "${ROOT_DIR}/tests/test_hue_discovery_response.c" \
+    "${ROOT_DIR}/tests/test_weather_format.c" \
     "${ROOT_DIR}/main/commands/assistant_command_dispatch.c" \
     "${ROOT_DIR}/main/commands/assistant_command_text.c" \
     "${ROOT_DIR}/main/assistant_state.c" \
     "${ROOT_DIR}/main/hue/hue_command_map.c" \
+    "${ROOT_DIR}/main/hue/hue_discovery_response.c" \
     "${ROOT_DIR}/main/weather/weather_format.c" \
     -o "${BUILD_DIR}/unit_tests"
 

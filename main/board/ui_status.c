@@ -69,6 +69,8 @@ static const glyph_t s_font[] = {
     {'Y', {0x11, 0x11, 0x0A, 0x04, 0x04, 0x04, 0x04}}, {'Z', {0x1F, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1F}},
 };
 
+static void ui_status_note_activity(void);
+
 /**
  * @brief Convert 8-bit RGB components into RGB565 panel color format.
  * @param r Red component in 8-bit space.
@@ -515,6 +517,33 @@ void ui_status_set(ui_status_state_t state, const char *detail) {
     render_status(state, detail);
 
     xSemaphoreGive(s_ui_mutex);
+}
+
+/**
+ * @brief Try to update the screen without blocking if another UI render is already in progress.
+ * @param state The new status state to display.
+ * @param detail Optional detail text shown on the screen.
+ * @return ESP_OK when the update was rendered, ESP_ERR_TIMEOUT when the UI is busy, or ESP_ERR_INVALID_STATE when the
+ * UI is not ready.
+ * @note Use this for hot-path status changes such as wake-word feedback where audio processing must not wait on the
+ * display.
+ */
+esp_err_t ui_status_try_set(ui_status_state_t state, const char *detail) {
+    if (!s_ready || s_ui_mutex == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (xSemaphoreTake(s_ui_mutex, 0) != pdTRUE) {
+        return ESP_ERR_TIMEOUT;
+    }
+
+    ui_status_note_activity();
+    s_current_state = state;
+    display_power_set(true);
+    render_status(state, detail);
+
+    xSemaphoreGive(s_ui_mutex);
+    return ESP_OK;
 }
 
 /**

@@ -126,6 +126,8 @@ On boot, the firmware now automatically attempts a Hue group refresh after Wi-Fi
 
 After a successful sync, the firmware fetches the Hue groups list from the bridge, normalizes the spoken names, saves the accepted groups to the `storage` partition, and rebuilds the active MultiNet command table.
 
+The firmware now prefers local Hue bridge discovery and caches the discovered bridge IP for later boots. `CONFIG_HUE_BRIDGE_IP` is no longer required for normal operation. If you set it, it is used only as an optional seed or fallback when discovery has not succeeded yet.
+
 After a successful sync, the firmware supports commands like:
 
 - `turn on living room`
@@ -299,7 +301,16 @@ Then edit `sdkconfig.defaults.local` and set:
 ```text
 CONFIG_HUE_WIFI_SSID="your-ssid"
 CONFIG_HUE_WIFI_PASSWORD="your-password"
+CONFIG_HUE_BRIDGE_API_KEY="your-hue-api-key"
 ```
+
+Optional Hue setting:
+
+```text
+CONFIG_HUE_BRIDGE_IP="192.168.68.60"
+```
+
+That bridge IP is now optional. The firmware can discover the Hue bridge on your LAN and cache the discovered address, so you usually only need Wi-Fi credentials and the Hue API key.
 
 When building or flashing from a fresh shell, include the local defaults file and regenerate `sdkconfig` if needed:
 

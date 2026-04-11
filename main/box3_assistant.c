@@ -65,6 +65,7 @@ static const TickType_t BRIDGE_ERROR_HOLD_TIME = ERROR_STATUS_HOLD_TIME;
 
 static void audio_feed_set_paused(assistant_runtime_t *rt, bool paused);
 static void sleep_with_speech_heartbeat(assistant_runtime_t *rt, TickType_t duration);
+static void restore_idle_ui(assistant_runtime_t *rt);
 static void show_status_then_return_to_standby(assistant_runtime_t *rt,
                                                ui_status_state_t state,
                                                const char *detail,
@@ -213,7 +214,34 @@ static void show_status_then_return_to_standby(assistant_runtime_t *rt,
     }
     ui_status_set(state, detail);
     sleep_with_speech_heartbeat(rt, hold_time);
+    restore_idle_ui(rt);
     return_to_standby(rt);
+}
+
+/**
+ * @brief Restore the correct idle screen after command execution or recovery completes.
+ * @param rt Shared assistant runtime state used to determine whether the presence clock should own the display.
+ * @return This function does not return a value.
+ * @note When presence is still active, this draws the clock immediately to avoid flashing the ready screen first.
+ */
+static void restore_idle_ui(assistant_runtime_t *rt) {
+    TickType_t now = xTaskGetTickCount();
+    bool motion_recent = rt->last_presence_motion_tick != 0 &&
+                         (now - rt->last_presence_motion_tick) < pdMS_TO_TICKS(PRESENCE_TIMEOUT_MS);
+
+    if (motion_recent) {
+        char time_text[24];
+        char date_text[32];
+        bool clock_synced = time_support_format_now(time_text, sizeof(time_text), date_text, sizeof(date_text));
+
+        if (clock_synced) {
+            ui_status_show_clock(time_text, date_text, CONFIG_ASSISTANT_LOCATION_NAME);
+        } else {
+            ui_status_show_clock("SYNCING TIME", "WAITING FOR NTP", CONFIG_ASSISTANT_LOCATION_NAME);
+        }
+        return;
+    }
+
     ui_status_set(UI_STATUS_READY, NULL);
 }
 
@@ -277,6 +305,7 @@ static void presence_clock_task(void *arg) {
 
         if (motion_detected) {
             last_motion_tick = now;
+            rt->last_presence_motion_tick = now;
         }
 
         if (!assistant_idle) {
@@ -300,12 +329,13 @@ static void presence_clock_task(void *arg) {
         }
 
         bool clock_synced = time_support_format_now(time_text, sizeof(time_text), date_text, sizeof(date_text));
-        bool should_redraw = !display_owned_by_presence || clock_synced != last_clock_synced;
-
-        if (clock_synced) {
-            should_redraw =
-                should_redraw || strcmp(time_text, last_time_text) != 0 || strcmp(date_text, last_date_text) != 0;
-        }
+        bool should_redraw = assistant_presence_clock_should_redraw(display_owned_by_presence,
+                                                                    last_clock_synced,
+                                                                    clock_synced,
+                                                                    time_text,
+                                                                    last_time_text,
+                                                                    date_text,
+                                                                    last_date_text);
 
         if (should_redraw) {
             if (clock_synced) {
@@ -336,21 +366,17 @@ static void assistant_session_timeout_task(void *arg) {
         vTaskDelay(pdMS_TO_TICKS(ASSISTANT_WATCHDOG_POLL_MS));
 
         TickType_t now = xTaskGetTickCount();
-        uint32_t audio_stalled_ms =
-            rt->audio_feed_heartbeat_tick == 0 ? 0 : (uint32_t) pdTICKS_TO_MS(now - rt->audio_feed_heartbeat_tick);
-        uint32_t speech_detect_stalled_ms = rt->speech_detect_heartbeat_tick == 0
-                                              ? 0
-                                              : (uint32_t) pdTICKS_TO_MS(now - rt->speech_detect_heartbeat_tick);
-        uint32_t presence_clock_stalled_ms = rt->presence_clock_heartbeat_tick == 0
-                                               ? 0
-                                               : (uint32_t) pdTICKS_TO_MS(now - rt->presence_clock_heartbeat_tick);
+        uint32_t audio_stalled_ms = assistant_elapsed_ms_since_tick(now, rt->audio_feed_heartbeat_tick);
+        uint32_t speech_detect_stalled_ms = assistant_elapsed_ms_since_tick(now, rt->speech_detect_heartbeat_tick);
+        uint32_t presence_clock_stalled_ms = assistant_elapsed_ms_since_tick(now, rt->presence_clock_heartbeat_tick);
 
         if (assistant_task_timed_out(
                 rt->audio_feed_heartbeat_tick != 0, audio_stalled_ms, ASSISTANT_TASK_HEARTBEAT_TIMEOUT_MS)) {
             ESP_LOGE(TAG, "Audio feed task heartbeat stalled for %lu ms; restarting", (unsigned long) audio_stalled_ms);
             esp_restart();
         }
-        if (assistant_task_timed_out(
+        if (rt->assistant_stage != ASSISTANT_STAGE_EXECUTING &&
+            assistant_task_timed_out(
                 rt->speech_detect_heartbeat_tick != 0, speech_detect_stalled_ms, ASSISTANT_TASK_HEARTBEAT_TIMEOUT_MS)) {
             ESP_LOGE(TAG,
                      "Speech detect task heartbeat stalled for %lu ms; restarting",
@@ -370,8 +396,8 @@ static void assistant_session_timeout_task(void *arg) {
             continue;
         }
 
-        TickType_t elapsed_ms = pdTICKS_TO_MS(now - rt->assistant_awake_tick);
-        TickType_t stalled_ms = rt->speech_progress_tick == 0 ? 0 : pdTICKS_TO_MS(now - rt->speech_progress_tick);
+        TickType_t elapsed_ms = assistant_elapsed_ms_since_tick(now, rt->assistant_awake_tick);
+        TickType_t stalled_ms = assistant_elapsed_ms_since_tick(now, rt->speech_progress_tick);
 
         if (rt->assistant_stage == ASSISTANT_STAGE_LISTENING && rt->speech_progress_tick != 0 &&
             stalled_ms >= ASSISTANT_LISTENING_STALL_TIMEOUT_MS) {
@@ -612,7 +638,10 @@ static void speech_detect_task(void *arg) {
                 rt->multinet->clean(rt->model_data);
                 rt->afe_handle->disable_wakenet(rt->afe_data);
                 ESP_LOGI(TAG, "Wake word detected: %s", WAKE_WORD);
-                ui_status_set(UI_STATUS_LISTENING, NULL);
+                esp_err_t ui_err = ui_status_try_set(UI_STATUS_LISTENING, NULL);
+                if (ui_err == ESP_ERR_TIMEOUT) {
+                    ESP_LOGW(TAG, "Skipped listening UI update because the display was busy");
+                }
             }
             continue;
         }
@@ -622,7 +651,7 @@ static void speech_detect_task(void *arg) {
             elapsed_ms, COMMAND_WINDOW_MS, COMMAND_MIN_LISTEN_MS, ASSISTANT_MN_STATE_DETECTING, true);
         if (listen_step == ASSISTANT_LISTEN_STEP_RECOVER_COMMAND_TIMEOUT) {
             ESP_LOGW(TAG, "Forcing standby after %lu ms without a final command state", (unsigned long) elapsed_ms);
-            show_status_then_return_to_standby(rt, UI_STATUS_ERROR, "Command timeout", STATUS_HOLD_TIME);
+            show_status_then_return_to_standby(rt, UI_STATUS_READY, "No command detected", STATUS_HOLD_TIME);
             continue;
         }
 
@@ -645,7 +674,7 @@ static void speech_detect_task(void *arg) {
         }
         if (listen_step == ASSISTANT_LISTEN_STEP_RECOVER_NO_COMMAND) {
             ESP_LOGI(TAG, "Command window timed out after wake word at %lu ms", (unsigned long) elapsed_ms);
-            show_status_then_return_to_standby(rt, UI_STATUS_ERROR, "No command heard", STATUS_HOLD_TIME);
+            show_status_then_return_to_standby(rt, UI_STATUS_READY, "No command detected", STATUS_HOLD_TIME);
             continue;
         }
 
@@ -686,7 +715,6 @@ static void speech_detect_task(void *arg) {
         rt->current_command_id = command_id;
         rt->execution_timeout_pending = false;
         rt->execution_timeout_tick = 0;
-        ui_status_set(UI_STATUS_WORKING, command_text);
         assistant_diag_start_command(command_id, rt->assistant_stage);
         ESP_LOGI(TAG, "Starting command execution for id=%d label=\"%s\"", command_id, command_text);
 
@@ -720,9 +748,19 @@ static void speech_detect_task(void *arg) {
                 snprintf(action_detail, sizeof(action_detail), "Weather unavailable");
             }
         } else if (dispatch.type == ASSISTANT_COMMAND_ACTION_HUE_GROUP) {
+            ESP_LOGI(TAG,
+                     "Hue action phase=start group_index=%u group_id=%s on=%s",
+                     (unsigned) dispatch.group_index,
+                     rt->groups[dispatch.group_index].id,
+                     dispatch.on ? "true" : "false");
             action_err = hue_client_set_group_by_id(rt->groups[dispatch.group_index].id, dispatch.on);
+            ESP_LOGI(TAG, "Hue action phase=after_client err=%s", esp_err_to_name(action_err));
             if (action_err != ESP_OK) {
+                ESP_LOGI(TAG, "Hue action phase=format_error_detail");
                 format_hue_request_error_detail("Hue command failed", action_err, action_detail, sizeof(action_detail));
+                ESP_LOGI(TAG,
+                         "Hue action phase=after_format_error_detail detail=\"%s\"",
+                         action_detail[0] != '\0' ? action_detail : "<empty>");
             }
         } else {
             if (dispatch.type == ASSISTANT_COMMAND_ACTION_UNKNOWN) {
@@ -745,11 +783,17 @@ static void speech_detect_task(void *arg) {
         }
 
         if (action_err == ESP_OK) {
+            ESP_LOGI(TAG,
+                     "Command result phase=ui_success detail=\"%s\"",
+                     action_detail[0] != '\0' ? action_detail : command_text);
             ui_status_set(UI_STATUS_SUCCESS, action_detail[0] != '\0' ? action_detail : command_text);
         } else {
             if (hold_time < ERROR_STATUS_HOLD_TIME) {
                 hold_time = ERROR_STATUS_HOLD_TIME;
             }
+            ESP_LOGI(TAG,
+                     "Command result phase=ui_error detail=\"%s\"",
+                     action_detail[0] != '\0' ? action_detail : command_text);
             ui_status_set(UI_STATUS_ERROR, action_detail[0] != '\0' ? action_detail : command_text);
         }
 
@@ -762,8 +806,8 @@ static void speech_detect_task(void *arg) {
         assistant_diag_finish_command(action_err);
         clear_active_session(rt);
         sleep_with_speech_heartbeat(rt, hold_time);
+        restore_idle_ui(rt);
         return_to_standby(rt);
-        ui_status_set(UI_STATUS_READY, NULL);
     }
 }
 
@@ -780,6 +824,7 @@ void app_main(void) {
     rt->audio_feed_heartbeat_tick = startup_tick;
     rt->speech_detect_heartbeat_tick = startup_tick;
     rt->presence_clock_heartbeat_tick = startup_tick;
+    rt->last_presence_motion_tick = 0;
     rt->speech_progress_tick = startup_tick;
 
     esp_err_t err = nvs_flash_init();

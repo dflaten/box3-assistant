@@ -42,6 +42,9 @@ typedef struct {
     volatile TickType_t speech_detect_heartbeat_tick;
     /** Tick count updated by the presence clock task to prove it is still running. */
     volatile TickType_t presence_clock_heartbeat_tick;
+    /** Tick count of the most recent presence motion detection used to decide whether the idle clock should stay
+     * visible. */
+    volatile TickType_t last_presence_motion_tick;
     /** Tick count updated whenever the speech pipeline makes forward progress. */
     volatile TickType_t speech_progress_tick;
     /** High-level stage used for watchdog diagnostics. */

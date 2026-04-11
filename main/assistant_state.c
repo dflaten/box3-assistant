@@ -1,3 +1,5 @@
+#include <string.h>
+
 #include "assistant_state.h"
 
 /**
@@ -52,6 +54,52 @@ assistant_listen_step_t assistant_step_for_multinet(uint32_t elapsed_ms,
     }
 
     return ASSISTANT_LISTEN_STEP_CONTINUE;
+}
+
+/**
+ * @brief Convert two tick snapshots into elapsed milliseconds without wrapping on out-of-order reads.
+ * @param now_tick The current scheduler tick snapshot.
+ * @param then_tick The earlier scheduler tick snapshot to compare against.
+ * @return Milliseconds elapsed between the two ticks, or zero when the compared tick is unset or newer than the current
+ * snapshot.
+ * @note Watchdog reads race with task heartbeat updates on another core, so future-looking tick values must be clamped.
+ */
+uint32_t assistant_elapsed_ms_since_tick(uint32_t now_tick, uint32_t then_tick) {
+    if (then_tick == 0 || then_tick > now_tick) {
+        return 0;
+    }
+
+    return now_tick - then_tick;
+}
+
+/**
+ * @brief Decide whether the presence clock should redraw based on ownership, sync state, and displayed text.
+ * @param display_owned_by_presence True when the presence clock currently owns the display.
+ * @param last_clock_synced The previous clock-sync state shown on screen.
+ * @param clock_synced The current clock-sync state to consider.
+ * @param time_text The current formatted time string when clock_synced is true.
+ * @param last_time_text The previously displayed time string.
+ * @param date_text The current formatted date string when clock_synced is true.
+ * @param last_date_text The previously displayed date string.
+ * @return True when the clock UI should redraw, otherwise false.
+ */
+bool assistant_presence_clock_should_redraw(bool display_owned_by_presence,
+                                            bool last_clock_synced,
+                                            bool clock_synced,
+                                            const char *time_text,
+                                            const char *last_time_text,
+                                            const char *date_text,
+                                            const char *last_date_text) {
+    if (!display_owned_by_presence || clock_synced != last_clock_synced) {
+        return true;
+    }
+
+    if (!clock_synced) {
+        return false;
+    }
+
+    return strcmp(time_text != NULL ? time_text : "", last_time_text != NULL ? last_time_text : "") != 0 ||
+           strcmp(date_text != NULL ? date_text : "", last_date_text != NULL ? last_date_text : "") != 0;
 }
 
 /**

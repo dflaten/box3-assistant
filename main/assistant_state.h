@@ -26,6 +26,14 @@ assistant_listen_step_t assistant_step_for_multinet(uint32_t elapsed_ms,
                                                     uint32_t command_min_listen_ms,
                                                     assistant_mn_state_t mn_state,
                                                     bool have_results);
+uint32_t assistant_elapsed_ms_since_tick(uint32_t now_tick, uint32_t then_tick);
+bool assistant_presence_clock_should_redraw(bool display_owned_by_presence,
+                                            bool last_clock_synced,
+                                            bool clock_synced,
+                                            const char *time_text,
+                                            const char *last_time_text,
+                                            const char *date_text,
+                                            const char *last_date_text);
 bool assistant_task_timed_out(bool have_heartbeat_tick, uint32_t stalled_ms, uint32_t timeout_ms);
 bool assistant_session_timed_out(bool assistant_awake,
                                  bool have_awake_tick,
