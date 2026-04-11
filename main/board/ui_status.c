@@ -26,7 +26,7 @@ static const char *TAG = "hue-voice";
 #define UI_CHAR_SPACING       2
 #define UI_IDLE_TIMEOUT_MS    30000
 #define UI_IDLE_POLL_MS       1000
-#define UI_MUTEX_TIMEOUT_MS   250
+#define UI_MUTEX_TIMEOUT_MS   2000
 #define UI_IDLE_TASK_STACK    4096
 #define UI_IDLE_TASK_PRIORITY 2
 
@@ -429,7 +429,7 @@ static void ui_idle_task(void *arg) {
             continue;
         }
 
-        if (xSemaphoreTake(s_ui_mutex, pdMS_TO_TICKS(UI_MUTEX_TIMEOUT_MS)) == pdTRUE) {
+        if (xSemaphoreTake(s_ui_mutex, 0) == pdTRUE) {
             if (s_display_on && s_current_state == UI_STATUS_READY) {
                 TickType_t idle_ticks = xTaskGetTickCount() - s_last_activity_tick;
                 if (idle_ticks >= pdMS_TO_TICKS(UI_IDLE_TIMEOUT_MS)) {
@@ -438,8 +438,6 @@ static void ui_idle_task(void *arg) {
                 }
             }
             xSemaphoreGive(s_ui_mutex);
-        } else {
-            ESP_LOGW(TAG, "Timed out waiting for UI mutex in idle task");
         }
     }
 }

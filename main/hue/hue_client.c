@@ -250,8 +250,8 @@ esp_err_t hue_client_probe_bridge(void) {
         return ESP_ERR_INVALID_ARG;
     }
 
-    char url[96];
-    snprintf(url, sizeof(url), "http://%s/api/config", CONFIG_HUE_BRIDGE_IP);
+    char url[160];
+    snprintf(url, sizeof(url), "http://%s/api/%s/config", CONFIG_HUE_BRIDGE_IP, CONFIG_HUE_BRIDGE_API_KEY);
 
     hue_http_trace_t trace = {0};
     int status = 0;
@@ -266,7 +266,7 @@ esp_err_t hue_client_probe_bridge(void) {
     if (status < 200 || status >= 300) {
         ESP_LOGW(TAG, "Hue bridge probe returned HTTP %d", status);
         hue_http_trace_deinit(&trace);
-        return ESP_FAIL;
+        return ESP_ERR_NOT_FOUND;
     }
 
     cJSON *root = cJSON_Parse(trace.body);
@@ -386,7 +386,12 @@ esp_err_t hue_client_set_group_by_id(const char *group_id, bool on) {
 
     ESP_LOGI(TAG, "Sending Hue group action: bridge=%s group=%s payload=%s", CONFIG_HUE_BRIDGE_IP, group_id, body);
 
-    esp_err_t err = hue_http_perform(url, HTTP_METHOD_PUT, body, &trace, NULL);
+    int status = 0;
+    esp_err_t err = hue_http_perform(url, HTTP_METHOD_PUT, body, &trace, &status);
+    if (err == ESP_OK && (status < 200 || status >= 300)) {
+        ESP_LOGE(TAG, "Hue group action returned HTTP %d", status);
+        err = ESP_FAIL;
+    }
     hue_http_trace_deinit(&trace);
     return err;
 }

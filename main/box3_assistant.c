@@ -59,8 +59,9 @@
 static const char *TAG = "hue-voice";
 static const char *WAKE_WORD = "Hi ESP";
 static const TickType_t STATUS_HOLD_TIME = pdMS_TO_TICKS(1200);
+static const TickType_t ERROR_STATUS_HOLD_TIME = pdMS_TO_TICKS(4000);
 static const TickType_t WEATHER_STATUS_HOLD_TIME = pdMS_TO_TICKS(WEATHER_STATUS_HOLD_MS);
-static const TickType_t BRIDGE_ERROR_HOLD_TIME = pdMS_TO_TICKS(2500);
+static const TickType_t BRIDGE_ERROR_HOLD_TIME = ERROR_STATUS_HOLD_TIME;
 
 static void audio_feed_set_paused(assistant_runtime_t *rt, bool paused);
 static void sleep_with_speech_heartbeat(assistant_runtime_t *rt, TickType_t duration);
@@ -103,7 +104,7 @@ static void format_hue_probe_error_detail(esp_err_t probe_err, char *detail, siz
     if (!wifi_is_connected() || probe_err == ESP_ERR_INVALID_STATE) {
         snprintf(detail, detail_size, "Hue Wi-Fi disconnected");
     } else if (hue_client_error_is_connectivity(probe_err) || probe_err == ESP_ERR_NOT_FOUND) {
-        snprintf(detail, detail_size, "Check Hue bridge IP");
+        snprintf(detail, detail_size, "Wrong Hue bridge IP");
     } else {
         snprintf(detail, detail_size, "Hue bridge unavailable");
     }
@@ -207,6 +208,9 @@ static void show_status_then_return_to_standby(assistant_runtime_t *rt,
                                                const char *detail,
                                                TickType_t hold_time) {
     audio_feed_set_paused(rt, true);
+    if (state == UI_STATUS_ERROR && hold_time < ERROR_STATUS_HOLD_TIME) {
+        hold_time = ERROR_STATUS_HOLD_TIME;
+    }
     ui_status_set(state, detail);
     sleep_with_speech_heartbeat(rt, hold_time);
     return_to_standby(rt);
@@ -743,6 +747,9 @@ static void speech_detect_task(void *arg) {
         if (action_err == ESP_OK) {
             ui_status_set(UI_STATUS_SUCCESS, action_detail[0] != '\0' ? action_detail : command_text);
         } else {
+            if (hold_time < ERROR_STATUS_HOLD_TIME) {
+                hold_time = ERROR_STATUS_HOLD_TIME;
+            }
             ui_status_set(UI_STATUS_ERROR, action_detail[0] != '\0' ? action_detail : command_text);
         }
 
