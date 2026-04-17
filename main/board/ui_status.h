@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stdint.h>
 
 #include "esp_err.h"
 
@@ -19,4 +20,5 @@ esp_err_t ui_status_init(void);
 void ui_status_set(ui_status_state_t state, const char *detail);
 esp_err_t ui_status_try_set(ui_status_state_t state, const char *detail);
 void ui_status_show_clock(const char *time_text, const char *date_text, const char *location_text);
+uint32_t ui_status_render_stalled_ms(void);
 esp_err_t ui_status_display_set(bool on);

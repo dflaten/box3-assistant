@@ -369,6 +369,7 @@ static void assistant_session_timeout_task(void *arg) {
         uint32_t audio_stalled_ms = assistant_elapsed_ms_since_tick(now, rt->audio_feed_heartbeat_tick);
         uint32_t speech_detect_stalled_ms = assistant_elapsed_ms_since_tick(now, rt->speech_detect_heartbeat_tick);
         uint32_t presence_clock_stalled_ms = assistant_elapsed_ms_since_tick(now, rt->presence_clock_heartbeat_tick);
+        uint32_t ui_render_stalled_ms = ui_status_render_stalled_ms();
 
         if (assistant_task_timed_out(
                 rt->audio_feed_heartbeat_tick != 0, audio_stalled_ms, ASSISTANT_TASK_HEARTBEAT_TIMEOUT_MS)) {
@@ -389,6 +390,10 @@ static void assistant_session_timeout_task(void *arg) {
             ESP_LOGE(TAG,
                      "Presence clock task heartbeat stalled for %lu ms; restarting",
                      (unsigned long) presence_clock_stalled_ms);
+            esp_restart();
+        }
+        if (ui_render_stalled_ms >= ASSISTANT_TASK_HEARTBEAT_TIMEOUT_MS) {
+            ESP_LOGE(TAG, "UI render stalled for %lu ms; restarting", (unsigned long) ui_render_stalled_ms);
             esp_restart();
         }
 

@@ -1,6 +1,7 @@
 #include <ctype.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "freertos/FreeRTOS.h"
@@ -9,6 +10,7 @@
 
 #include "esp_check.h"
 #include "esp_err.h"
+#include "esp_heap_caps.h"
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_types.h"
 #include "esp_log.h"
@@ -27,6 +29,7 @@ static const char *TAG = "hue-voice";
 #define UI_IDLE_TIMEOUT_MS    30000
 #define UI_IDLE_POLL_MS       1000
 #define UI_MUTEX_TIMEOUT_MS   2000
+#define UI_FLUSH_CHUNK_ROWS   20
 #define UI_IDLE_TASK_STACK    4096
 #define UI_IDLE_TASK_PRIORITY 2
 
@@ -36,8 +39,10 @@ static bool s_ready;
 static bool s_display_on;
 static ui_status_state_t s_current_state = UI_STATUS_BOOTING;
 static TickType_t s_last_activity_tick;
-static uint16_t s_line_buffer[UI_SCREEN_WIDTH];
+static uint16_t *s_frame_buffer;
 static SemaphoreHandle_t s_ui_mutex;
+static volatile TickType_t s_ui_render_start_tick;
+static volatile bool s_ui_render_in_progress;
 
 typedef struct {
     char code;
@@ -70,6 +75,9 @@ static const glyph_t s_font[] = {
 };
 
 static void ui_status_note_activity(void);
+static void ui_render_begin(void);
+static void ui_render_end(void);
+static esp_err_t ui_flush_frame_buffer(void);
 
 /**
  * @brief Convert 8-bit RGB components into RGB565 panel color format.
@@ -204,7 +212,7 @@ static esp_err_t display_power_set(bool on) {
 }
 
 /**
- * @brief Fill a clipped rectangle on the display with a solid color.
+ * @brief Fill a clipped rectangle in the framebuffer with a solid color.
  * @param x Left edge in pixels.
  * @param y Top edge in pixels.
  * @param w Rectangle width in pixels.
@@ -213,7 +221,7 @@ static esp_err_t display_power_set(bool on) {
  * @return This function does not return a value.
  */
 static void fill_rect(int x, int y, int w, int h, uint16_t color) {
-    if (x >= UI_SCREEN_WIDTH || y >= UI_SCREEN_HEIGHT || w <= 0 || h <= 0) {
+    if (s_frame_buffer == NULL || x >= UI_SCREEN_WIDTH || y >= UI_SCREEN_HEIGHT || w <= 0 || h <= 0) {
         return;
     }
 
@@ -235,11 +243,11 @@ static void fill_rect(int x, int y, int w, int h, uint16_t color) {
         return;
     }
 
-    for (int i = 0; i < w; ++i) {
-        s_line_buffer[i] = color;
-    }
     for (int row = 0; row < h; ++row) {
-        esp_lcd_panel_draw_bitmap(s_panel, x, y + row, x + w, y + row + 1, s_line_buffer);
+        uint16_t *dst = s_frame_buffer + ((size_t) (y + row) * UI_SCREEN_WIDTH) + x;
+        for (int col = 0; col < w; ++col) {
+            dst[col] = color;
+        }
     }
 }
 
@@ -419,6 +427,32 @@ static void render_clock(const char *time_text, const char *date_text, const cha
 }
 
 /**
+ * @brief Flush the rendered framebuffer to the LCD in large row bands.
+ * @return ESP_OK on success, or an ESP error code if a panel transfer fails.
+ * @note Chunked flushes drastically reduce panel call count while keeping transfer sizes bounded.
+ */
+static esp_err_t ui_flush_frame_buffer(void) {
+    if (s_frame_buffer == NULL) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    for (int y = 0; y < UI_SCREEN_HEIGHT; y += UI_FLUSH_CHUNK_ROWS) {
+        int chunk_rows = UI_SCREEN_HEIGHT - y;
+        if (chunk_rows > UI_FLUSH_CHUNK_ROWS) {
+            chunk_rows = UI_FLUSH_CHUNK_ROWS;
+        }
+
+        esp_err_t err = esp_lcd_panel_draw_bitmap(
+            s_panel, 0, y, UI_SCREEN_WIDTH, y + chunk_rows, s_frame_buffer + ((size_t) y * UI_SCREEN_WIDTH));
+        if (err != ESP_OK) {
+            return err;
+        }
+    }
+
+    return ESP_OK;
+}
+
+/**
  * @brief Power down the display after extended idle time in the ready state.
  * @param arg Unused FreeRTOS task parameter.
  * @return This task does not return.
@@ -455,7 +489,7 @@ esp_err_t ui_status_init(void) {
     }
 
     const bsp_display_config_t display_cfg = {
-        .max_transfer_sz = BSP_LCD_H_RES * 20 * (int) sizeof(uint16_t),
+        .max_transfer_sz = BSP_LCD_H_RES * UI_FLUSH_CHUNK_ROWS * (int) sizeof(uint16_t),
     };
 
     esp_err_t err = bsp_display_new(&display_cfg, &s_panel, &s_io);
@@ -478,6 +512,16 @@ esp_err_t ui_status_init(void) {
         return ESP_ERR_NO_MEM;
     }
 
+    size_t frame_bytes = (size_t) UI_SCREEN_WIDTH * UI_SCREEN_HEIGHT * sizeof(uint16_t);
+    s_frame_buffer = heap_caps_malloc(frame_bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (s_frame_buffer == NULL) {
+        s_frame_buffer = malloc(frame_bytes);
+    }
+    if (s_frame_buffer == NULL) {
+        ESP_LOGE(TAG, "Failed to allocate UI framebuffer");
+        return ESP_ERR_NO_MEM;
+    }
+
     s_last_activity_tick = xTaskGetTickCount();
     s_ready = true;
     xTaskCreate(ui_idle_task, "ui_idle", UI_IDLE_TASK_STACK, NULL, UI_IDLE_TASK_PRIORITY, NULL);
@@ -492,6 +536,24 @@ esp_err_t ui_status_init(void) {
  */
 static void ui_status_note_activity(void) {
     s_last_activity_tick = xTaskGetTickCount();
+}
+
+/**
+ * @brief Mark the beginning of a synchronous LCD render operation for watchdog visibility.
+ * @return This function does not return a value.
+ */
+static void ui_render_begin(void) {
+    s_ui_render_start_tick = xTaskGetTickCount();
+    s_ui_render_in_progress = true;
+}
+
+/**
+ * @brief Mark the end of a synchronous LCD render operation.
+ * @return This function does not return a value.
+ */
+static void ui_render_end(void) {
+    s_ui_render_in_progress = false;
+    s_ui_render_start_tick = 0;
 }
 
 /**
@@ -513,10 +575,22 @@ void ui_status_set(ui_status_state_t state, const char *detail) {
 
     ui_status_note_activity();
     s_current_state = state;
-    display_power_set(true);
-    render_status(state, detail);
+    ui_render_begin();
+    esp_err_t power_err = display_power_set(true);
+    esp_err_t flush_err = ESP_OK;
+    if (power_err == ESP_OK) {
+        render_status(state, detail);
+        flush_err = ui_flush_frame_buffer();
+    }
+    ui_render_end();
 
     xSemaphoreGive(s_ui_mutex);
+
+    if (power_err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to power status screen: %s", esp_err_to_name(power_err));
+    } else if (flush_err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to flush status screen: %s", esp_err_to_name(flush_err));
+    }
 }
 
 /**
@@ -539,10 +613,26 @@ esp_err_t ui_status_try_set(ui_status_state_t state, const char *detail) {
 
     ui_status_note_activity();
     s_current_state = state;
-    display_power_set(true);
-    render_status(state, detail);
+    ui_render_begin();
+    esp_err_t power_err = display_power_set(true);
+    esp_err_t flush_err = ESP_OK;
+    if (power_err == ESP_OK) {
+        render_status(state, detail);
+        flush_err = ui_flush_frame_buffer();
+    }
+    ui_render_end();
 
     xSemaphoreGive(s_ui_mutex);
+
+    if (power_err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to power status screen: %s", esp_err_to_name(power_err));
+        return power_err;
+    }
+    if (flush_err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to flush status screen: %s", esp_err_to_name(flush_err));
+        return flush_err;
+    }
+
     return ESP_OK;
 }
 
@@ -565,10 +655,39 @@ void ui_status_show_clock(const char *time_text, const char *date_text, const ch
     }
 
     s_current_state = UI_STATUS_CLOCK;
-    display_power_set(true);
-    render_clock(time_text, date_text, location_text);
+    ui_render_begin();
+    esp_err_t power_err = display_power_set(true);
+    esp_err_t flush_err = ESP_OK;
+    if (power_err == ESP_OK) {
+        render_clock(time_text, date_text, location_text);
+        flush_err = ui_flush_frame_buffer();
+    }
+    ui_render_end();
 
     xSemaphoreGive(s_ui_mutex);
+
+    if (power_err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to power clock screen: %s", esp_err_to_name(power_err));
+    } else if (flush_err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to flush clock screen: %s", esp_err_to_name(flush_err));
+    }
+}
+
+/**
+ * @brief Report how long the current UI render has been stuck in progress.
+ * @return Milliseconds since the current render began, or zero when no render is active.
+ */
+uint32_t ui_status_render_stalled_ms(void) {
+    if (!s_ready || !s_ui_render_in_progress || s_ui_render_start_tick == 0) {
+        return 0;
+    }
+
+    TickType_t now = xTaskGetTickCount();
+    if (s_ui_render_start_tick > now) {
+        return 0;
+    }
+
+    return (uint32_t) pdTICKS_TO_MS(now - s_ui_render_start_tick);
 }
 
 /**
