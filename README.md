@@ -2,7 +2,6 @@
 
 <p align="center">
   <img alt="Platform" src="https://img.shields.io/badge/platform-ESP32--S3--BOX--3-0f766e" />
-  <img alt="Framework" src="https://img.shields.io/badge/framework-ESP--IDF-1d4ed8" />
   <img alt="ESP-IDF Version" src="https://img.shields.io/badge/esp--idf-v5.5.3-2563eb" />
   <img alt="Language" src="https://img.shields.io/badge/language-C-334155" />
   <img alt="Voice" src="https://img.shields.io/badge/voice-Hi%20ESP-f59e0b" />
