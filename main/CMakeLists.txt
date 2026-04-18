@@ -16,6 +16,7 @@ idf_component_register(
         "system/wifi_support.c"
         "weather/weather_client.c"
         "weather/weather_format.c"
+        "weather/weather_open_meteo_provider.c"
     INCLUDE_DIRS "."
     REQUIRES espressif__esp-sr esp_http_client nvs_flash esp_netif esp_event esp_wifi esp_lcd json mbedtls espressif__esp-box-3_noglib
 )

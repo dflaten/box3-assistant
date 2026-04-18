@@ -12,6 +12,7 @@ typedef enum {
     UI_STATUS_CLOCK,
     UI_STATUS_LISTENING,
     UI_STATUS_WORKING,
+    UI_STATUS_WEATHER_LOADING,
     UI_STATUS_SUCCESS,
     UI_STATUS_ERROR,
 } ui_status_state_t;

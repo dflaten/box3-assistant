@@ -31,7 +31,7 @@ config HUE_MIC_GAIN_DB
     default 30
 
 config WEATHER_BASE_URL
-    string "Open-Meteo base URL"
+    string "Weather provider base URL"
     default "https://api.open-meteo.com"
 
 config ASSISTANT_LOCATION_NAME

@@ -39,7 +39,7 @@ integrations such as ChatGPT so data sharing stays limited.
 | 🧠 | Device | ESP32-S3-BOX-3 |
 | 🛠 | Firmware stack | ESP-IDF |
 | 🎙 | Wake word | `Hi ESP` |
-| 💡 | Integrations | Philips Hue and Open-Meteo weather |
+| 💡 | Integrations | Philips Hue and pluggable weather provider |
 | 🖥 | Output | On-device status and weather screens |
 | 🧪 | Validation | Host-side unit tests and firmware builds |
 
@@ -51,7 +51,7 @@ The project currently includes:
 ✅ Speech model loading and local command detection  
 ✅ Wi-Fi configuration hooks  
 ✅ Hue bridge control path  
-✅ Open-Meteo weather commands for a configurable location  
+✅ Weather commands for a configurable location  
 ✅ On-device weather display with multiline forecast details  
 ✅ Persisted assistant diagnostics for timeout and reboot debugging  
 ✅ Host-side unit tests for assistant state, command labeling, and weather formatting
@@ -70,6 +70,8 @@ The firmware is currently organized around a small set of runtime-oriented modul
 | `main/assistant_command_text.c` | Format user-facing labels for built-in and Hue-backed commands |
 | `main/assistant_state.c` | Pure assistant state and timeout decision helpers |
 | `main/assistant_diagnostics.c` | Persist lightweight reboot and command breadcrumbs for post-restart debugging |
+| `main/weather/weather_client.c` | Provider-agnostic weather facade used by the assistant flow and UI |
+| `main/weather/weather_open_meteo_provider.c` | Default Open-Meteo weather provider implementation behind the weather facade |
 
 ## Design Docs
 
@@ -137,10 +139,12 @@ After a successful sync, the firmware supports commands like:
 
 Saying `weather today` or `weather tomorrow` causes the firmware to:
 
-1. fetch the requested forecast for the configured location from Open-Meteo over HTTPS
+1. fetch the requested forecast for the configured location from the active weather provider over HTTPS
 2. display a multiline weather summary on the BOX-3 screen
 3. hold that weather screen for 15 seconds
 4. return to standby
+
+The current default provider is Open-Meteo, but the firmware now routes weather fetches through a provider boundary so another backend can be swapped in without changing the main assistant command flow or weather UI formatting.
 
 Transient connection failures are retried automatically. Weather network failures show `Weather network error`, and execution-time cancellation recovery shows `Weather timeout`.
 
@@ -344,6 +348,8 @@ The `set -x SDKCONFIG_DEFAULTS ...` command only applies to the current shell se
 ## Weather Configuration
 
 The weather command target is configurable through `menuconfig` or your local `sdkconfig.defaults.local` file.
+
+The tracked defaults currently point at Open-Meteo, but `CONFIG_WEATHER_BASE_URL` is now labeled and treated as the active weather provider base URL rather than an Open-Meteo-only setting.
 
 Config values available through `menuconfig`:
 

@@ -76,6 +76,7 @@ static void presence_clock_task(void *arg);
 static void format_hue_probe_error_detail(esp_err_t probe_err, char *detail, size_t detail_size);
 static void
 format_hue_request_error_detail(const char *fallback, esp_err_t request_err, char *detail, size_t detail_size);
+static void format_weather_loading_detail(char *detail, size_t detail_size);
 
 static const char *assistant_stage_name(assistant_stage_t stage) {
     switch (stage) {
@@ -141,6 +142,20 @@ format_hue_request_error_detail(const char *fallback, esp_err_t request_err, cha
     if (hue_client_error_is_connectivity(request_err)) {
         ESP_LOGW(TAG, "Hue request failed even though bridge probe succeeded: %s", esp_err_to_name(request_err));
     }
+}
+
+/**
+ * @brief Build the short loading text shown while waiting for the weather provider.
+ * @param detail Destination buffer for the user-facing loading text.
+ * @param detail_size Size of the destination buffer in bytes.
+ * @return This function does not return a value.
+ */
+static void format_weather_loading_detail(char *detail, size_t detail_size) {
+    if (detail == NULL || detail_size == 0) {
+        return;
+    }
+
+    snprintf(detail, detail_size, "Checking %s", weather_client_provider_name());
 }
 
 /**
@@ -741,6 +756,8 @@ static void speech_detect_task(void *arg) {
         } else if (dispatch.type == ASSISTANT_COMMAND_ACTION_WEATHER_TODAY ||
                    dispatch.type == ASSISTANT_COMMAND_ACTION_WEATHER_TOMORROW) {
             weather_report_t report = {0};
+            format_weather_loading_detail(action_detail, sizeof(action_detail));
+            ui_status_set(UI_STATUS_WEATHER_LOADING, action_detail);
             action_err = (dispatch.type == ASSISTANT_COMMAND_ACTION_WEATHER_TODAY)
                            ? weather_client_fetch_today(&report)
                            : weather_client_fetch_tomorrow(&report);

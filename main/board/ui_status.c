@@ -109,6 +109,8 @@ static uint16_t state_bg(ui_status_state_t state) {
         return rgb565(194, 120, 3);
     case UI_STATUS_WORKING:
         return rgb565(180, 83, 9);
+    case UI_STATUS_WEATHER_LOADING:
+        return rgb565(3, 105, 161);
     case UI_STATUS_SUCCESS:
         return rgb565(22, 163, 74);
     case UI_STATUS_ERROR:
@@ -136,6 +138,8 @@ static const char *state_title(ui_status_state_t state) {
         return "LISTENING";
     case UI_STATUS_WORKING:
         return "WORKING";
+    case UI_STATUS_WEATHER_LOADING:
+        return "";
     case UI_STATUS_SUCCESS:
         return "";
     case UI_STATUS_ERROR:
@@ -163,6 +167,8 @@ static const char *state_subtitle(ui_status_state_t state) {
         return "SAY A COMMAND";
     case UI_STATUS_WORKING:
         return "PROCESSING REQUEST";
+    case UI_STATUS_WEATHER_LOADING:
+        return "";
     case UI_STATUS_SUCCESS:
         return "";
     case UI_STATUS_ERROR:
