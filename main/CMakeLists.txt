@@ -14,6 +14,8 @@ idf_component_register(
         "hue/hue_group_store.c"
         "system/time_support.c"
         "system/wifi_support.c"
+        "tts/local_tts_client.c"
+        "tts/tts_player.c"
         "weather/weather_client.c"
         "weather/weather_format.c"
         "weather/weather_open_meteo_provider.c"

@@ -5,7 +5,7 @@
   <img alt="ESP-IDF Version" src="https://img.shields.io/badge/esp--idf-v5.5.3-2563eb" />
   <img alt="Language" src="https://img.shields.io/badge/language-C-334155" />
   <img alt="Voice" src="https://img.shields.io/badge/voice-Hi%20ESP-f59e0b" />
-  <img alt="Integrations" src="https://img.shields.io/badge/integrations-Hue%20%2B%20Weather-7c3aed" />
+  <img alt="Integrations" src="https://img.shields.io/badge/integrations-Hue%20%2B%20Weather%20%2B%20Piper-7c3aed" />
   <img alt="Tests" src="https://img.shields.io/badge/tests-host%20unit-16a34a" />
 </p>
 
@@ -30,6 +30,7 @@ integrations such as ChatGPT so data sharing stays limited.
 - [Secrets](#secrets)
 - [Wi-Fi Credentials](#wi-fi-credentials)
 - [Weather Configuration](#weather-configuration)
+- [Local TTS Configuration](#local-tts-configuration)
 - [Tests](#tests)
 
 ## Overview
@@ -39,8 +40,8 @@ integrations such as ChatGPT so data sharing stays limited.
 | 🧠 | Device | ESP32-S3-BOX-3 |
 | 🛠 | Firmware stack | ESP-IDF |
 | 🎙 | Wake word | `Hi ESP` |
-| 💡 | Integrations | Philips Hue and pluggable weather provider |
-| 🖥 | Output | On-device status and weather screens |
+| 💡 | Integrations | Philips Hue, pluggable weather provider, and local Piper TTS |
+| 🖥 | Output | On-device status, weather screens, and optional local TTS |
 | 🧪 | Validation | Host-side unit tests and firmware builds |
 
 ## Status
@@ -53,10 +54,11 @@ The project currently includes:
 ✅ Hue bridge control path  
 ✅ Weather commands for a configurable location  
 ✅ On-device weather display with multiline forecast details  
+✅ Optional local Piper TTS playback for weather responses  
 ✅ Persisted assistant diagnostics for timeout and reboot debugging  
 ✅ Host-side unit tests for assistant state, command labeling, and weather formatting
 
-Planned future work includes local spoken weather playback, broader assistant features, richer UI, ChatGPT-backed interactions, and Jellyfin/media support.
+Planned future work includes broader assistant speech reuse, richer UI, ChatGPT-backed interactions, and Jellyfin/media support.
 
 ## Architecture
 
@@ -70,6 +72,8 @@ The firmware is currently organized around a small set of runtime-oriented modul
 | `main/assistant_command_text.c` | Format user-facing labels for built-in and Hue-backed commands |
 | `main/assistant_state.c` | Pure assistant state and timeout decision helpers |
 | `main/assistant_diagnostics.c` | Persist lightweight reboot and command breadcrumbs for post-restart debugging |
+| `main/tts/local_tts_client.c` | Low-level local TTS client, including Piper socket-event synthesis and legacy HTTP/WAV handling |
+| `main/tts/tts_player.c` | Generic device speech facade used by assistant commands to speak text through the BOX-3 speaker |
 | `main/weather/weather_client.c` | Provider-agnostic weather facade used by the assistant flow and UI |
 | `main/weather/weather_open_meteo_provider.c` | Default Open-Meteo weather provider implementation behind the weather facade |
 
@@ -100,7 +104,7 @@ The current assistant interaction flow is:
 4. show the result on screen
 5. return to standby
 
-If a weather or Hue HTTP request stalls during execution, the firmware now attempts to cancel the active request first. If that recovery does not finish within a short grace window, the device falls back to a restart.
+If a weather, Hue, or TTS request stalls during execution, the firmware now attempts to cancel the active request first. If that recovery does not finish within a short grace window, the device falls back to a restart.
 
 On the next boot, the firmware logs the previous command diagnostics and briefly shows a short `Prev ...` message on screen when the prior run ended in a notable timeout or reboot during command handling.
 
@@ -111,7 +115,7 @@ On the next boot, the firmware logs the previous command diagnostics and briefly
 | 🎙 | Wake word | `Hi ESP` |
 | 🔄 | Built-in commands | `update groups from hue`, `weather today`, `weather tomorrow` |
 | 💡 | Dynamic commands | `turn on <group>`, `turn off <group>` |
-| ⚠ | Timeout handling | Cancel active HTTP work first, then restart only if recovery stalls |
+| ⚠ | Timeout handling | Cancel active network or TTS work first, then restart only if recovery stalls |
 | 🧾 | Weather failure text | `Weather network error`, `Weather timeout`, `Weather unavailable` |
 
 Current wake word:
@@ -141,8 +145,9 @@ Saying `weather today` or `weather tomorrow` causes the firmware to:
 
 1. fetch the requested forecast for the configured location from the active weather provider over HTTPS
 2. display a multiline weather summary on the BOX-3 screen
-3. hold that weather screen for 15 seconds
-4. return to standby
+3. optionally speak the forecast through the local TTS player when Piper is configured
+4. keep the weather screen visible for about 30 seconds total, including time spent speaking
+5. return to standby
 
 The current default provider is Open-Meteo, but the firmware now routes weather fetches through a provider boundary so another backend can be swapped in without changing the main assistant command flow or weather UI formatting.
 
@@ -164,7 +169,8 @@ Current limits:
 - group names are normalized into simple spoken forms before they become commands
 - synced groups persist across power cycles, but you may need to resync after reflashing if the `storage` partition is erased or rewritten
 - weather location is configurable through local sdkconfig values
-- weather playback is screen-only for now; spoken playback is planned separately
+- spoken weather requires a reachable local Piper-compatible TTS service
+- the current BOX-3 playback path keeps I2S output at 16 kHz to match the active microphone/AFE path, so higher-rate Piper audio is downsampled on-device until server-side 16 kHz output is added
 
 ## Development Setup
 
@@ -388,6 +394,39 @@ For this repo, the intended setup is:
 The firmware also enables the ESP certificate bundle in tracked defaults so HTTPS weather requests can validate the remote certificate.
 
 Note: the firmware uses Espressif's built-in `Hi, ESP` WakeNet model (`wn9s_hiesp`) for this wake-word flow. Say `Hi ESP` when testing the current firmware.
+
+## Local TTS Configuration
+
+Local speech output is optional. The current implementation targets a Piper service running on the LAN and is used by weather responses through the reusable `tts_player_speak()` facade.
+
+The working Piper integration uses a raw TCP socket event protocol, not HTTP. The firmware sends one newline-terminated JSON request:
+
+```json
+{"type":"synthesize","data":{"text":"Today in Fargo..."}}
+```
+
+It then reads newline-delimited events such as `audio-start`, `audio-chunk`, and `audio-stop`. `audio-chunk` events include binary PCM payloads, which the firmware streams directly to the speaker path instead of buffering the entire utterance in RAM.
+
+Config values available through `menuconfig`:
+
+- `CONFIG_TTS_PIPER_ENABLED`
+- `CONFIG_TTS_PIPER_BASE_URL`
+- `CONFIG_TTS_PIPER_EVENT_SOCKET`
+- `CONFIG_TTS_PIPER_TIMEOUT_MS`
+- `CONFIG_TTS_PIPER_VOLUME_PERCENT`
+
+Recommended local defaults:
+
+```text
+CONFIG_TTS_PIPER_BASE_URL="http://192.168.68.65:10200"
+CONFIG_TTS_PIPER_EVENT_SOCKET=y
+CONFIG_TTS_PIPER_TIMEOUT_MS=20000
+CONFIG_TTS_PIPER_VOLUME_PERCENT=85
+```
+
+`CONFIG_TTS_PIPER_BASE_URL` is still used for host and port parsing in socket mode. The scheme is ignored by the socket client, but keeping `http://host:port` makes the value compatible with the legacy HTTP path.
+
+Volume is controlled at speaker-codec initialization by `CONFIG_TTS_PIPER_VOLUME_PERCENT`. Increase or decrease that value in `sdkconfig.defaults.local` or through `menuconfig`, then rebuild and flash.
 
 ## Tests
 

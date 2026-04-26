@@ -2,14 +2,14 @@
 
 ## Goal
 
-Add an optional local text-to-speech path for the existing `weather today` command so the ESP32-S3-BOX-3 can:
+Add an optional local text-to-speech path for weather commands so the ESP32-S3-BOX-3 can:
 
-1. fetch Fargo weather
+1. fetch the configured location's weather
 2. display the weather on screen
 3. request synthesized speech from a nearby machine running Piper
 4. play the returned audio through the BOX-3 speaker
 
-This design does not implement voice playback yet. It defines the intended architecture and build order.
+This design has been implemented for `weather today` and `weather tomorrow`.
 
 ## Why A Local TTS Service
 
@@ -30,7 +30,7 @@ It also avoids embedding a speech engine directly into the ESP firmware, which w
 - more codec/playback edge cases
 - tighter coupling to one synthesis engine
 
-## Proposed Local Engine
+## Local Engine
 
 Target engine:
 
@@ -47,7 +47,7 @@ This repo should not directly vendor Piper into the firmware tree.
 Instead, the safer first design is:
 
 - run Piper as a separate service on a local machine
-- have the firmware talk to that service over HTTP
+- have the firmware talk to that service over a network protocol
 - keep the BOX-3 firmware independent of Piper internals
 
 That separation keeps this project at the service-boundary level rather than redistributing Piper code inside the firmware.
@@ -59,30 +59,30 @@ The intended interaction for weather becomes:
 1. user says `Hi ESP`
 2. device wakes and listens for a command
 3. user says `weather today`
-4. device fetches Fargo weather from Open-Meteo
+4. device fetches weather from Open-Meteo
 5. device shows the weather details on screen
 6. device sends a natural-language weather sentence to the local TTS service
 7. local TTS service synthesizes speech with Piper
-8. device receives PCM or WAV audio
+8. device receives streamed PCM audio
 9. device plays the speech through the BOX-3 speaker
-10. device keeps the weather on screen while playback completes
+10. device keeps the weather on screen while playback completes and targets about 30 seconds total visible time
 11. device returns to standby
 
-## Proposed Architecture
+## Implemented Architecture
 
 There are three moving pieces:
 
 - BOX-3 firmware
   - weather fetch
   - weather sentence construction
-  - local TTS request
-  - audio playback
+  - generic `tts_player_speak()` request
+  - audio playback and sample-rate adaptation
   - UI timing and standby transitions
 
 - local TTS service
-  - HTTP wrapper around Piper
+  - socket/event wrapper around Piper
   - accepts plain text
-  - synthesizes a WAV or raw PCM response
+  - streams raw PCM response chunks
 
 - Piper engine host
   - voice model storage
@@ -93,16 +93,21 @@ There are three moving pieces:
 
 The firmware changes should stay modular and small.
 
-Suggested additions:
+Implemented additions:
 
 - `main/tts/`
   - `local_tts_client.c`
   - `local_tts_client.h`
+  - `tts_player.c`
+  - `tts_player.h`
 
-Potential board-audio additions:
+Implemented board-audio additions:
 
-- extend `main/board/board_audio.c`
-- extend `main/board/board_audio.h`
+- `board_audio_init_speaker()`
+- `board_audio_begin_pcm()`
+- `board_audio_write_pcm()`
+- `board_audio_end_pcm()`
+- `board_audio_play_pcm()`
 
 Responsibilities:
 
@@ -110,71 +115,78 @@ Responsibilities:
   - fetch and parse forecast data
 
 - `box3_assistant.c`
-  - orchestrate weather fetch, screen display, TTS request, and playback
+  - orchestrate weather fetch, screen display, TTS request, and standby timing
 
 - `local_tts_client`
-  - POST text to the local TTS service
-  - receive WAV or PCM response
-  - expose synthesized audio buffer and format metadata
+  - connect to the local TTS service
+  - send Piper synthesis events
+  - receive socket events and PCM chunks
+  - expose synthesized audio stream or buffered audio plus format metadata
+
+- `tts_player`
+  - provide the generic assistant-facing `tts_player_speak()` API
+  - stream PCM chunks to board audio
+  - downsample higher-rate Piper PCM to the BOX-3 playback rate while the microphone path remains open
 
 - `board_audio`
   - initialize the speaker codec
   - open playback stream
   - write PCM frames to the BOX-3 speaker
 
-## Local TTS Service Contract
+## Implemented Local TTS Service Contract
 
-The firmware should not know Piper-specific command-line details.
+The firmware does not know Piper command-line details, but the current working service is not HTTP.
 
-Use a small HTTP service contract instead.
+It uses a raw TCP socket protocol with newline-delimited JSON events and binary payloads.
 
 ### Request
 
-- `POST /synthesize`
-- content type: `application/json`
+- TCP connect to the host and port in `CONFIG_TTS_PIPER_BASE_URL`
+- send a newline-terminated JSON event
 
 Example:
 
 ```json
 {
-  "text": "Today in Fargo, it is 39 degrees and cloudy. The high is 64 and the low is 27. Wind is 10 miles per hour with a 1 percent chance of rain.",
-  "voice": "en_US",
-  "format": "wav"
+  "type": "synthesize",
+  "data": {
+    "text": "Today in Fargo, it is 39 degrees and cloudy. The high is 64 and the low is 27."
+  }
 }
 ```
 
-Required field:
-
-- `text`
-
-Optional fields:
-
-- `voice`
-- `format`
-- `sample_rate`
+The serialized request is followed by `\n`.
 
 ### Response
 
-Recommended first response type:
+The service sends newline-delimited JSON events. Audio events can include a binary payload immediately after the event line.
 
-- `audio/wav`
+Events handled by firmware:
 
-Alternative:
+- `audio-start`
+- `audio-chunk`
+- `audio-stop`
 
-- raw PCM plus JSON metadata headers
+Important metadata:
 
-WAV is the better first version because it is self-describing and easier to validate.
+- `rate`
+- `width`
+- `channels`
+- `data_length`
+- `payload_length`
 
-## Why Use WAV First
+`audio-chunk` payloads are 16-bit PCM bytes. The firmware streams these chunks through `tts_player` instead of accumulating the full utterance in RAM.
 
-For the firmware, WAV simplifies:
+## Legacy HTTP/WAV Path
 
-- sample rate detection
-- channel count detection
-- bit depth detection
-- debugging captured responses
+The lower-level `local_tts_client` still contains a buffered HTTP/WAV implementation behind config options. That path is useful for simple services, but it is not the active Piper setup.
 
-The BOX-3 speaker path ultimately needs raw PCM frames, but parsing a simple WAV header on-device is straightforward.
+The active setup uses:
+
+- `CONFIG_TTS_PIPER_EVENT_SOCKET=y`
+- `CONFIG_TTS_PIPER_BASE_URL="http://host:port"`
+
+`CONFIG_TTS_PIPER_BASE_URL` is parsed for host and port in socket mode.
 
 ## Natural-Language Weather Text
 
@@ -186,9 +198,9 @@ Build a separate spoken sentence such as:
 
 This should be generated locally by firmware code from the parsed `weather_report_t`.
 
-Suggested helper:
+Implemented helper:
 
-- `weather_client_format_spoken()`
+- `weather_format_spoken()`
 
 That keeps:
 
@@ -206,17 +218,25 @@ High-level playback flow:
 3. feed PCM frames to `esp_codec_dev_write`
 4. close or reuse the stream after playback
 
-Expected initial audio format target:
+Current playback behavior:
 
 - mono
 - 16-bit PCM
-- 22050 Hz or 16000 Hz
+- output to BOX-3 speaker at 16000 Hz
 
-The local TTS service should preferably normalize to one known format to reduce firmware branching.
+Piper currently returns 22050 Hz PCM for the tested voice. The BOX-3 microphone/AFE path is open at 16000 Hz on the same I2S peer, so opening playback at 22050 Hz causes a sample-rate conflict.
 
-Recommended first choice:
+Current workaround:
 
-- mono 16-bit PCM WAV at 22050 Hz
+- keep the speaker stream at 16000 Hz
+- downsample incoming Piper PCM in `tts_player`
+- stream downsampled frames to `board_audio_write_pcm()`
+
+Preferred future fix:
+
+- make the Piper side return 16000 Hz PCM directly
+- use a native 16 kHz Piper voice, or
+- resample server-side before streaming to the ESP
 
 ## Assistant State Handling
 
@@ -228,7 +248,7 @@ During TTS fetch and playback:
 
 - keep wake word disabled
 - keep the weather UI visible
-- pause microphone feed, just as the current weather HTTP fetch now does
+- pause microphone feed, just as other blocking command execution does
 - avoid returning to standby until playback completes or fails
 
 This prevents AFE ringbuffer overruns and avoids accidental re-triggering during playback.
@@ -238,7 +258,9 @@ This prevents AFE ringbuffer overruns and avoids accidental re-triggering during
 While speaking weather:
 
 - keep the detailed weather screen visible
-- optionally change subtitle/detail line to indicate playback, for example `READING WEATHER`
+- target about 30 seconds total visible time from the moment the forecast first appears
+- include TTS playback time in that 30-second window
+- if TTS takes longer than 30 seconds, keep the screen visible until playback completes
 
 Failure cases:
 
@@ -247,20 +269,26 @@ Failure cases:
 
 The first version does not need playback progress UI.
 
-## Configuration Needs
+## Configuration
 
-Add config for the local TTS service:
+Config for the local TTS service:
 
-- `CONFIG_LOCAL_TTS_BASE_URL`
-- `CONFIG_LOCAL_TTS_TIMEOUT_MS`
-- `CONFIG_LOCAL_TTS_ENABLED`
+- `CONFIG_TTS_PIPER_ENABLED`
+- `CONFIG_TTS_PIPER_BASE_URL`
+- `CONFIG_TTS_PIPER_EVENT_SOCKET`
+- `CONFIG_TTS_PIPER_TIMEOUT_MS`
+- `CONFIG_TTS_PIPER_VOLUME_PERCENT`
 
-Optional later:
+Example:
 
-- `CONFIG_LOCAL_TTS_VOICE`
-- `CONFIG_LOCAL_TTS_FORMAT`
+```text
+CONFIG_TTS_PIPER_BASE_URL="http://192.168.68.65:10200"
+CONFIG_TTS_PIPER_EVENT_SOCKET=y
+CONFIG_TTS_PIPER_TIMEOUT_MS=20000
+CONFIG_TTS_PIPER_VOLUME_PERCENT=85
+```
 
-These should follow the current local-config workflow and remain generic in tracked defaults.
+These follow the current local-config workflow and remain generic in tracked defaults.
 
 ## Failure Handling
 
@@ -268,14 +296,14 @@ The feature should fail safely.
 
 ### TTS service unavailable
 
-- log the HTTP error
+- log the socket or HTTP error
 - skip spoken playback
 - leave the weather display visible for its hold period
 - return to standby
 
 ### Invalid audio response
 
-- reject malformed WAV or unsupported format
+- reject malformed events, malformed WAV, or unsupported format
 - log parse details
 - skip playback
 - return to standby cleanly
@@ -299,9 +327,9 @@ If direct embedding is ever considered later, licensing implications need separa
 
 A small wrapper on the nearby machine should:
 
-1. accept text over HTTP
+1. accept text over the socket-event protocol
 2. call Piper with a configured voice model
-3. return synthesized WAV bytes
+3. stream PCM chunks with audio metadata
 
 This wrapper can be:
 
@@ -312,40 +340,42 @@ This wrapper can be:
 
 The firmware should not care which runtime hosts Piper.
 
-## First Implementation Scope
+## Implemented Scope
 
-Included in the future first build:
+Included:
 
-- local TTS HTTP client in firmware
+- local TTS socket-event client in firmware
 - weather spoken sentence builder
 - speaker codec initialization
-- WAV response parsing
-- PCM playback through BOX-3 speaker
+- streaming PCM playback through BOX-3 speaker
+- generic `tts_player_speak()` abstraction for future non-weather speech
+- device-side downsampling to avoid the shared I2S 16 kHz microphone conflict
 - graceful fallback to screen-only weather if TTS fails
 
 Deferred:
 
-- streaming audio from the TTS server
 - generic assistant speech beyond weather
 - user-selectable voices
 - caching common spoken phrases
 - synchronized lip-sync or progress UI
 - full duplex audio with playback reference into AEC
+- server-side 16 kHz normalization
 
-## Recommended Build Order
+## Build Order Used
 
 1. extend `board_audio` with speaker initialization and PCM playback helpers
-2. add `local_tts_client` with a simple `/synthesize` WAV contract
+2. add `local_tts_client` with Piper socket-event support
 3. add spoken weather sentence formatting
 4. wire weather command flow to fetch TTS after screen update
 5. keep the screen visible during playback
 6. verify fallback behavior when TTS is unavailable
 7. verify end-to-end on device with a local Piper service
+8. extract generic `tts_player` so future commands can speak text without knowing Piper details
 
 ## Open Questions
 
-- Should the TTS server always return fully buffered WAV, or should it later support chunked streaming?
-- Which voice and sample rate should be standardized for the first version?
+- Which voice and sample rate should be standardized?
+- Should the TTS server normalize all output to 16 kHz before sending it to the ESP?
 - Should weather playback be interruptible by touch or wake word?
 - Should the firmware cache the last successful spoken weather audio for quick replay?
 - Should spoken weather be optional per command, or always enabled when local TTS is configured?

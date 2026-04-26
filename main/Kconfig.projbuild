@@ -55,4 +55,38 @@ config WEATHER_TIMEOUT_MS
     range 1000 30000
     default 8000
 
+config TTS_PIPER_ENABLED
+    bool "Enable local Piper TTS playback"
+    default y
+
+config TTS_PIPER_BASE_URL
+    string "Local Piper TTS base URL"
+    default ""
+
+config TTS_PIPER_SYNTH_PATH
+    string "Local Piper TTS synthesis path"
+    default "/"
+
+config TTS_PIPER_EVENT_SOCKET
+    bool "Use Piper event socket protocol"
+    default y
+
+config TTS_PIPER_VOICE
+    string "Local Piper TTS voice"
+    default ""
+
+config TTS_PIPER_SEND_JSON
+    bool "Send local Piper TTS requests as JSON"
+    default n
+
+config TTS_PIPER_TIMEOUT_MS
+    int "Local Piper TTS timeout in ms"
+    range 1000 30000
+    default 20000
+
+config TTS_PIPER_VOLUME_PERCENT
+    int "Speaker playback volume percent"
+    range 0 100
+    default 55
+
 endmenu
