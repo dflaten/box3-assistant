@@ -38,11 +38,13 @@
 #include "board/ui_status.h"
 #include "system/time_support.h"
 #include "system/wifi_support.h"
+#include "tts/tts_player.h"
 #include "weather/weather_client.h"
+#include "weather/weather_format.h"
 
 #define COMMAND_WINDOW_MS                    10000
 #define COMMAND_MIN_LISTEN_MS                3000
-#define WEATHER_STATUS_HOLD_MS               15000
+#define WEATHER_STATUS_HOLD_MS               30000
 #define MAX_FETCH_FAILURES                   50
 #define ASSISTANT_SESSION_TIMEOUT_MS         30000
 #define ASSISTANT_LISTENING_STALL_TIMEOUT_MS 12000
@@ -440,6 +442,9 @@ static void assistant_session_timeout_task(void *arg) {
                     if (cancel_err == ESP_ERR_INVALID_STATE) {
                         cancel_err = hue_client_cancel_active_request();
                     }
+                    if (cancel_err == ESP_ERR_INVALID_STATE) {
+                        cancel_err = tts_player_cancel();
+                    }
                     ESP_LOGE(TAG,
                              "Assistant execution exceeded %d ms for command_id=%d; cancel result=%s",
                              ASSISTANT_SESSION_TIMEOUT_MS,
@@ -741,6 +746,7 @@ static void speech_detect_task(void *arg) {
         esp_err_t action_err = ESP_FAIL;
         char action_detail[WEATHER_DETAIL_TEXT_LEN] = {0};
         TickType_t hold_time = STATUS_HOLD_TIME;
+        TickType_t result_visible_start_tick = 0;
         assistant_command_dispatch_t dispatch;
         assistant_command_resolve(command_id, rt->group_count, &dispatch);
 
@@ -762,8 +768,18 @@ static void speech_detect_task(void *arg) {
                            ? weather_client_fetch_today(&report)
                            : weather_client_fetch_tomorrow(&report);
             if (action_err == ESP_OK) {
+                char spoken_detail[WEATHER_SPOKEN_TEXT_LEN];
                 weather_format_detail(&report, action_detail, sizeof(action_detail));
                 hold_time = WEATHER_STATUS_HOLD_TIME;
+                ui_status_set(UI_STATUS_SUCCESS, action_detail);
+                result_visible_start_tick = xTaskGetTickCount();
+                weather_format_spoken(&report, spoken_detail, sizeof(spoken_detail));
+                if (tts_player_is_configured()) {
+                    esp_err_t tts_err = tts_player_speak(spoken_detail);
+                    if (tts_err != ESP_OK) {
+                        ESP_LOGW(TAG, "Weather speech playback failed: %s", esp_err_to_name(tts_err));
+                    }
+                }
             } else if (action_err == ESP_ERR_HTTP_CONNECT || action_err == ESP_ERR_INVALID_STATE) {
                 snprintf(action_detail, sizeof(action_detail), "Weather network error");
             } else {
@@ -827,6 +843,10 @@ static void speech_detect_task(void *arg) {
 
         assistant_diag_finish_command(action_err);
         clear_active_session(rt);
+        if (action_err == ESP_OK && result_visible_start_tick != 0) {
+            TickType_t visible_elapsed = xTaskGetTickCount() - result_visible_start_tick;
+            hold_time = visible_elapsed < WEATHER_STATUS_HOLD_TIME ? WEATHER_STATUS_HOLD_TIME - visible_elapsed : 0;
+        }
         sleep_with_speech_heartbeat(rt, hold_time);
         restore_idle_ui(rt);
         return_to_standby(rt);
@@ -914,6 +934,7 @@ void app_main(void) {
     }
 
     ESP_ERROR_CHECK(board_audio_init_microphone(&rt->mic_codec));
+    ESP_ERROR_CHECK(board_audio_init_speaker());
     ESP_ERROR_CHECK(init_presence_sensor());
 
     ui_status_set(UI_STATUS_READY, NULL);

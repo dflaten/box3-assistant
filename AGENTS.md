@@ -50,6 +50,9 @@ cmake --build build --target unit-tests
 
 ## Notes
 
+- When working in a git worktree, sync `sdkconfig` from the main checkout before firmware builds or config edits with `make sdkconfig-from-main`, but always ask the user for confirmation before running it because it overwrites the worktree copy.
+- After the work is complete and the pull request has been published, copy the finished worktree `sdkconfig` back to the main checkout with `make sdkconfig-to-main`, but always ask the user for confirmation before running it because it overwrites the main checkout copy.
+- Never run either `sdkconfig` sync direction automatically or blindly.
 - Run `get_idf` in each new shell before using `idf.py`.
 - If `idf.py` is not found, the environment is not active yet.
 - Use the repo `.clang-format` for C/C++ formatting changes when `clang-format` is available locally.

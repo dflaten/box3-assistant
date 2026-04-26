@@ -90,6 +90,7 @@ This feature should follow the same high-level pattern already used for Hue:
 - small persistent store for synced device and media metadata
 - runtime speech phrase generation from cached names
 - simple execution path from recognized command to network action
+- optional spoken confirmations through the existing `tts_player_speak()` facade, not direct Piper calls
 
 ### Proposed Modules
 
@@ -121,6 +122,10 @@ Responsibilities:
   - add Jellyfin commands to the runtime command table
   - route recognized commands to Jellyfin actions
   - update UI status based on control outcome
+
+- existing `main/tts/tts_player.c`
+  - optional generic spoken confirmation path
+  - keeps Jellyfin code independent of Piper socket protocol details
 
 ## Configuration
 

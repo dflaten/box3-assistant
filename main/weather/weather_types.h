@@ -7,6 +7,7 @@
 #define WEATHER_DATE_LEN        16
 #define WEATHER_LOCATION_LEN    48
 #define WEATHER_DETAIL_TEXT_LEN 160
+#define WEATHER_SPOKEN_TEXT_LEN 256
 
 typedef enum {
     WEATHER_FORECAST_TODAY = 0,
@@ -20,6 +21,11 @@ typedef struct {
     int max_temp_f;
     int min_temp_f;
     int max_precip_probability;
+    float precipitation_amount_in;
+    float rain_amount_in;
+    float showers_amount_in;
+    float snowfall_amount_in;
+    float precipitation_hours;
     int wind_speed_mph;
     bool has_current_conditions;
     char summary[WEATHER_SUMMARY_LEN];

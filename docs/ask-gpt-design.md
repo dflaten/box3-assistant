@@ -25,7 +25,8 @@ The intended interaction is:
 7. local transcription service returns plain text
 8. device sends the transcribed text to ChatGPT
 9. device displays the answer on screen
-10. device returns to standby
+10. optionally speaks the answer through the existing local TTS player
+11. device returns to standby
 
 Example:
 
@@ -85,6 +86,10 @@ High-level component flow:
 - OpenAI API
   - receives transcript text
   - returns answer text
+
+- local TTS player, optional
+  - reuses `tts_player_speak()` for spoken answers
+  - keeps GPT-specific code independent of Piper socket details
 
 ## Firmware Flow Changes
 
@@ -170,7 +175,7 @@ Example logical payload:
 Example response usage:
 
 - show a concise answer on screen
-- later optionally feed the answer into a TTS path
+- optionally feed the answer into `tts_player_speak()` for local spoken playback
 
 ### 6. Return To Standby
 
@@ -205,6 +210,14 @@ Optional later:
   - conversation/session state
   - prompt building helpers
 
+Existing reusable TTS modules:
+
+- `main/tts/local_tts_client.c`
+  - low-level Piper connection and event parsing
+
+- `main/tts/tts_player.c`
+  - generic text-to-speech playback facade for assistant features
+
 Responsibilities:
 
 - `box3_assistant.c`
@@ -217,6 +230,9 @@ Responsibilities:
 - `openai_client`
   - send transcript text to OpenAI
   - parse reply text
+
+- `tts_player`
+  - speak the final response without exposing Piper protocol details to GPT code
 
 ## Local Transcription Options
 
@@ -372,12 +388,12 @@ Included:
 - local HTTP transcription request
 - OpenAI text response request
 - screen-only answer display
+- optional spoken answer through `tts_player_speak()` after the screen path is stable
 
 Deferred:
 
 - streaming transcription
 - streaming GPT responses
-- TTS playback
 - multi-turn conversation memory
 - silence-based end-of-speech detection
 - tool calling from GPT
@@ -415,5 +431,6 @@ Deferred:
 5. add `openai_client` for transcript-to-answer requests
 6. add UI states for question, transcribing, thinking, and reply
 7. verify end-to-end with screen-only output
+8. optionally add spoken answer playback through `tts_player_speak()`
 
 This ordering keeps the risk low and isolates each moving part.

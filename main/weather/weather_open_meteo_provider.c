@@ -23,6 +23,7 @@
 #define WEATHER_HTTP_TRACE_BODY_SIZE 4096
 #define WEATHER_MAX_CONNECT_ATTEMPTS 3
 #define WEATHER_RETRY_DELAY_MS       250
+#define WEATHER_CM_PER_INCH          2.54f
 
 typedef struct {
     char *body;
@@ -266,8 +267,9 @@ static esp_err_t weather_open_meteo_fetch_forecast(weather_forecast_day_t day, w
              sizeof(url),
              "%s/v1/"
              "forecast?latitude=%.4f&longitude=%.4f&current=temperature_2m,weather_code,wind_speed_10m&daily="
-             "temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code&temperature_unit="
-             "fahrenheit&wind_speed_unit=mph&timezone=%s&forecast_days=2",
+             "temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,rain_sum,"
+             "showers_sum,snowfall_sum,precipitation_hours,weather_code&temperature_unit=fahrenheit"
+             "&wind_speed_unit=mph&precipitation_unit=inch&timezone=%s&forecast_days=2",
              CONFIG_WEATHER_BASE_URL,
              latitude,
              longitude,
@@ -378,6 +380,11 @@ static esp_err_t weather_open_meteo_fetch_forecast(weather_forecast_day_t day, w
     double max_temp = 0;
     double min_temp = 0;
     double precip_probability = 0;
+    double precipitation_sum = 0;
+    double rain_sum = 0;
+    double showers_sum = 0;
+    double snowfall_sum = 0;
+    double precipitation_hours = 0;
     double daily_weather_code = 0;
     const int day_index = (day == WEATHER_FORECAST_TOMORROW) ? 1 : 0;
 
@@ -401,6 +408,21 @@ static esp_err_t weather_open_meteo_fetch_forecast(weather_forecast_day_t day, w
         err = json_get_array_number_at(daily, "precipitation_probability_max", day_index, &precip_probability);
     }
     if (err == ESP_OK) {
+        err = json_get_array_number_at(daily, "precipitation_sum", day_index, &precipitation_sum);
+    }
+    if (err == ESP_OK) {
+        err = json_get_array_number_at(daily, "rain_sum", day_index, &rain_sum);
+    }
+    if (err == ESP_OK) {
+        err = json_get_array_number_at(daily, "showers_sum", day_index, &showers_sum);
+    }
+    if (err == ESP_OK) {
+        err = json_get_array_number_at(daily, "snowfall_sum", day_index, &snowfall_sum);
+    }
+    if (err == ESP_OK) {
+        err = json_get_array_number_at(daily, "precipitation_hours", day_index, &precipitation_hours);
+    }
+    if (err == ESP_OK) {
         err = json_get_array_number_at(daily, "weather_code", day_index, &daily_weather_code);
     }
 
@@ -417,6 +439,11 @@ static esp_err_t weather_open_meteo_fetch_forecast(weather_forecast_day_t day, w
     out_report->max_temp_f = (int) (max_temp >= 0 ? max_temp + 0.5 : max_temp - 0.5);
     out_report->min_temp_f = (int) (min_temp >= 0 ? min_temp + 0.5 : min_temp - 0.5);
     out_report->max_precip_probability = (int) (precip_probability + 0.5);
+    out_report->precipitation_amount_in = (float) precipitation_sum;
+    out_report->rain_amount_in = (float) rain_sum;
+    out_report->showers_amount_in = (float) showers_sum;
+    out_report->snowfall_amount_in = (float) snowfall_sum / WEATHER_CM_PER_INCH;
+    out_report->precipitation_hours = (float) precipitation_hours;
     out_report->wind_speed_mph = (int) (current_wind_speed + 0.5);
     snprintf(out_report->summary,
              sizeof(out_report->summary),
@@ -425,7 +452,8 @@ static esp_err_t weather_open_meteo_fetch_forecast(weather_forecast_day_t day, w
                  (int) ((day == WEATHER_FORECAST_TODAY ? current_weather_code : daily_weather_code) + 0.5)));
 
     ESP_LOGI(TAG,
-             "%s weather day=%d date=%s now=%dF high=%dF low=%dF precip=%d%% wind=%dmph summary=%s",
+             "%s weather day=%d date=%s now=%dF high=%dF low=%dF precip=%d%% precip_in=%.2f rain_in=%.2f "
+             "showers_in=%.2f snow_in=%.2f precip_hours=%.1f wind=%dmph summary=%s",
              CONFIG_ASSISTANT_LOCATION_NAME,
              day_index,
              out_report->date,
@@ -433,6 +461,11 @@ static esp_err_t weather_open_meteo_fetch_forecast(weather_forecast_day_t day, w
              out_report->max_temp_f,
              out_report->min_temp_f,
              out_report->max_precip_probability,
+             (double) out_report->precipitation_amount_in,
+             (double) out_report->rain_amount_in,
+             (double) out_report->showers_amount_in,
+             (double) out_report->snowfall_amount_in,
+             (double) out_report->precipitation_hours,
              out_report->wind_speed_mph,
              out_report->summary);
 
