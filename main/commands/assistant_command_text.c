@@ -16,6 +16,12 @@ const char *assistant_command_text(
     if (command_id == ASSISTANT_CMD_WEATHER_TOMORROW) {
         return "Weather tomorrow";
     }
+    if (command_id == ASSISTANT_CMD_SET_TIMER) {
+        return "Set a timer";
+    }
+    if (command_id == ASSISTANT_CMD_STOP) {
+        return "Stop";
+    }
 
     size_t index = 0;
     bool on = false;

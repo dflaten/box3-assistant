@@ -38,6 +38,8 @@ esp_err_t hue_command_runtime_rebuild(assistant_runtime_t *rt,
                                       int sync_command_id,
                                       int weather_today_command_id,
                                       int weather_tomorrow_command_id,
+                                      int set_timer_command_id,
+                                      int stop_command_id,
                                       int group_command_base) {
     if (!rt->commands_allocated) {
         ESP_RETURN_ON_ERROR(
@@ -54,6 +56,9 @@ esp_err_t hue_command_runtime_rebuild(assistant_runtime_t *rt,
     ESP_RETURN_ON_ERROR(add_runtime_phrase(weather_tomorrow_command_id, "weather tomorrow"),
                         TAG,
                         "Failed to add tomorrow weather command");
+    ESP_RETURN_ON_ERROR(add_runtime_phrase(set_timer_command_id, "set a timer"), TAG, "Failed to add timer command");
+    ESP_RETURN_ON_ERROR(add_runtime_phrase(set_timer_command_id, "set timer"), TAG, "Failed to add timer command");
+    ESP_RETURN_ON_ERROR(add_runtime_phrase(stop_command_id, "stop"), TAG, "Failed to add stop command");
 
     for (size_t i = 0; i < rt->group_count; ++i) {
         char on_phrase[96];
@@ -89,6 +94,8 @@ esp_err_t hue_command_runtime_sync_groups(assistant_runtime_t *rt,
                                           int sync_command_id,
                                           int weather_today_command_id,
                                           int weather_tomorrow_command_id,
+                                          int set_timer_command_id,
+                                          int stop_command_id,
                                           int group_command_base) {
     size_t synced_count = 0;
     ESP_RETURN_ON_ERROR(hue_client_sync_groups(rt->groups, ASSISTANT_MAX_SYNCED_GROUPS, &synced_count),
@@ -97,11 +104,15 @@ esp_err_t hue_command_runtime_sync_groups(assistant_runtime_t *rt,
     rt->group_count = synced_count;
 
     ESP_RETURN_ON_ERROR(hue_group_store_save(rt->groups, rt->group_count), TAG, "Failed to save Hue groups");
-    ESP_RETURN_ON_ERROR(
-        hue_command_runtime_rebuild(
-            rt, sync_command_id, weather_today_command_id, weather_tomorrow_command_id, group_command_base),
-        TAG,
-        "Failed to rebuild command table after Hue sync");
+    ESP_RETURN_ON_ERROR(hue_command_runtime_rebuild(rt,
+                                                    sync_command_id,
+                                                    weather_today_command_id,
+                                                    weather_tomorrow_command_id,
+                                                    set_timer_command_id,
+                                                    stop_command_id,
+                                                    group_command_base),
+                        TAG,
+                        "Failed to rebuild command table after Hue sync");
 
     ESP_LOGI(TAG, "Synced %u usable Hue group(s)", (unsigned) rt->group_count);
     return ESP_OK;

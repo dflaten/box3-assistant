@@ -25,6 +25,14 @@ void assistant_command_resolve(int command_id, size_t group_count, assistant_com
         out_dispatch->type = ASSISTANT_COMMAND_ACTION_WEATHER_TOMORROW;
         return;
     }
+    if (command_id == ASSISTANT_CMD_SET_TIMER) {
+        out_dispatch->type = ASSISTANT_COMMAND_ACTION_SET_TIMER;
+        return;
+    }
+    if (command_id == ASSISTANT_CMD_STOP) {
+        out_dispatch->type = ASSISTANT_COMMAND_ACTION_STOP;
+        return;
+    }
 
     if (hue_decode_group_command_id(
             command_id, ASSISTANT_CMD_GROUP_BASE, group_count, &out_dispatch->group_index, &out_dispatch->on)) {

@@ -10,6 +10,7 @@
 #include "esp_mn_iface.h"
 
 #include "hue/hue_group.h"
+#include "timer/timer_runtime.h"
 
 #define ASSISTANT_MAX_SYNCED_GROUPS HUE_GROUP_MAX_COUNT
 
@@ -55,6 +56,10 @@ typedef struct {
     volatile bool execution_timeout_pending;
     /** Tick count captured when timeout recovery was first requested. */
     volatile TickType_t execution_timeout_tick;
+    /** True while direct command recognition should run without a wake word. */
+    volatile bool direct_command_mode;
+    /** True once direct command recognition has prepared MultiNet for the current direct-listen session. */
+    volatile bool direct_command_prepared;
     /** MultiNet interface selected from the ESP-SR model bundle. */
     esp_mn_iface_t *multinet;
     /** Opaque model instance owned by the selected MultiNet interface. */
@@ -69,4 +74,6 @@ typedef struct {
     hue_group_t groups[ASSISTANT_MAX_SYNCED_GROUPS];
     /** Number of valid entries currently stored in groups[]. */
     size_t group_count;
+    /** Active timer countdown and alarm state. */
+    timer_runtime_t timer;
 } assistant_runtime_t;

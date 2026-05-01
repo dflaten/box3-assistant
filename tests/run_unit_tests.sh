@@ -17,12 +17,18 @@ cc -std=c11 -Wall -Wextra -Werror \
     "${ROOT_DIR}/tests/test_command_dispatch.c" \
     "${ROOT_DIR}/tests/test_command_text.c" \
     "${ROOT_DIR}/tests/test_hue_discovery_response.c" \
+    "${ROOT_DIR}/tests/test_local_stt_protocol.c" \
+    "${ROOT_DIR}/tests/test_timer_parse.c" \
+    "${ROOT_DIR}/tests/test_timer_runtime.c" \
     "${ROOT_DIR}/tests/test_weather_format.c" \
     "${ROOT_DIR}/main/commands/assistant_command_dispatch.c" \
     "${ROOT_DIR}/main/commands/assistant_command_text.c" \
     "${ROOT_DIR}/main/assistant_state.c" \
     "${ROOT_DIR}/main/hue/hue_command_map.c" \
     "${ROOT_DIR}/main/hue/hue_discovery_response.c" \
+    "${ROOT_DIR}/main/stt/local_stt_protocol.c" \
+    "${ROOT_DIR}/main/timer/timer_parse.c" \
+    "${ROOT_DIR}/main/timer/timer_runtime.c" \
     "${ROOT_DIR}/main/weather/weather_format.c" \
     -o "${BUILD_DIR}/unit_tests"
 

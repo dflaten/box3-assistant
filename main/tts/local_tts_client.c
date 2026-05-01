@@ -16,8 +16,7 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 
-#include "lwip/netdb.h"
-
+#include "net/line_socket.h"
 #include "system/wifi_support.h"
 
 #define LOCAL_TTS_RESPONSE_INITIAL_BYTES 4096
@@ -116,44 +115,8 @@ static bool local_tts_url_has_scheme(const char *url) {
  */
 static bool
 local_tts_parse_host_port(const char *base_url, char *host, size_t host_size, char *port, size_t port_size) {
-    if (base_url == NULL || host == NULL || port == NULL || host_size == 0 || port_size == 0) {
-        return false;
-    }
-
-    const char *cursor = strstr(base_url, "://");
-    cursor = cursor != NULL ? cursor + 3 : base_url;
-    const char *host_start = cursor;
-    while (*cursor != '\0' && *cursor != ':' && *cursor != '/') {
-        cursor++;
-    }
-
-    size_t host_len = (size_t) (cursor - host_start);
-    if (host_len == 0 || host_len >= host_size) {
-        return false;
-    }
-    memcpy(host, host_start, host_len);
-    host[host_len] = '\0';
-
-    const char *port_start = NULL;
-    if (*cursor == ':') {
-        port_start = ++cursor;
-        while (*cursor != '\0' && *cursor != '/') {
-            cursor++;
-        }
-    }
-
-    if (port_start == NULL || port_start == cursor) {
-        snprintf(port, port_size, "%s", strncmp(base_url, "https://", 8) == 0 ? "443" : "80");
-        return true;
-    }
-
-    size_t port_len = (size_t) (cursor - port_start);
-    if (port_len >= port_size) {
-        return false;
-    }
-    memcpy(port, port_start, port_len);
-    port[port_len] = '\0';
-    return true;
+    const char *default_port = strncmp(base_url, "https://", 8) == 0 ? "443" : "80";
+    return line_socket_parse_host_port(base_url, default_port, host, host_size, port, port_size);
 }
 
 /**
@@ -263,16 +226,7 @@ static bool local_tts_pcm_reserve(local_tts_audio_t *audio, size_t *capacity, si
  * @return ESP_OK on success, or ESP_FAIL when send fails.
  */
 static esp_err_t local_tts_socket_send_all(int sock, const void *data, size_t len) {
-    const uint8_t *cursor = (const uint8_t *) data;
-    while (len > 0) {
-        ssize_t sent = send(sock, cursor, len, 0);
-        if (sent < 0) {
-            return ESP_FAIL;
-        }
-        cursor += sent;
-        len -= (size_t) sent;
-    }
-    return ESP_OK;
+    return line_socket_send_all(sock, data, len);
 }
 
 /**
@@ -283,16 +237,7 @@ static esp_err_t local_tts_socket_send_all(int sock, const void *data, size_t le
  * @return ESP_OK on success, ESP_ERR_INVALID_RESPONSE on EOF, or ESP_ERR_TIMEOUT on socket receive failure.
  */
 static esp_err_t local_tts_socket_recv_exact(int sock, void *data, size_t len) {
-    uint8_t *cursor = (uint8_t *) data;
-    while (len > 0) {
-        ssize_t received = recv(sock, cursor, len, 0);
-        if (received <= 0) {
-            return received == 0 ? ESP_ERR_INVALID_RESPONSE : ESP_ERR_TIMEOUT;
-        }
-        cursor += received;
-        len -= (size_t) received;
-    }
-    return ESP_OK;
+    return line_socket_recv_exact(sock, data, len);
 }
 
 /**
@@ -303,26 +248,7 @@ static esp_err_t local_tts_socket_recv_exact(int sock, void *data, size_t len) {
  * @return ESP_OK on success, ESP_ERR_NO_MEM if the line is too long, or an ESP error code.
  */
 static esp_err_t local_tts_socket_recv_line(int sock, char *line, size_t line_size) {
-    if (line == NULL || line_size == 0) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    size_t len = 0;
-    while (len + 1 < line_size) {
-        char c = '\0';
-        ssize_t received = recv(sock, &c, 1, 0);
-        if (received <= 0) {
-            return received == 0 ? ESP_ERR_INVALID_RESPONSE : ESP_ERR_TIMEOUT;
-        }
-        if (c == '\n') {
-            line[len] = '\0';
-            return ESP_OK;
-        }
-        line[len++] = c;
-    }
-
-    line[line_size - 1] = '\0';
-    return ESP_ERR_NO_MEM;
+    return line_socket_recv_line(sock, line, line_size);
 }
 
 /**
@@ -358,53 +284,11 @@ static void local_tts_event_update_audio_format(const cJSON *data, local_tts_aud
  * @return ESP_OK on success, or an ESP error code if DNS, socket creation, or connect fails.
  */
 static esp_err_t local_tts_socket_connect(const char *host, const char *port, int *out_sock) {
-    if (host == NULL || port == NULL || out_sock == NULL) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    struct addrinfo hints = {
-        .ai_family = AF_INET,
-        .ai_socktype = SOCK_STREAM,
-    };
-    struct addrinfo *result = NULL;
-    int gai_err = getaddrinfo(host, port, &hints, &result);
-    if (gai_err != 0 || result == NULL) {
-        ESP_LOGW(TAG, "Local TTS socket DNS failed: host=%s port=%s gai_err=%d", host, port, gai_err);
-        return ESP_FAIL;
-    }
-
-    int sock = -1;
-    esp_err_t err = ESP_FAIL;
-    for (struct addrinfo *addr = result; addr != NULL; addr = addr->ai_next) {
-        sock = socket(addr->ai_family, addr->ai_socktype, addr->ai_protocol);
-        if (sock < 0) {
-            continue;
-        }
-
-        struct timeval timeout = {
-            .tv_sec = CONFIG_TTS_PIPER_TIMEOUT_MS / 1000,
-            .tv_usec = (CONFIG_TTS_PIPER_TIMEOUT_MS % 1000) * 1000,
-        };
-        setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
-        setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
-
-        if (connect(sock, addr->ai_addr, addr->ai_addrlen) == 0) {
-            err = ESP_OK;
-            break;
-        }
-
-        close(sock);
-        sock = -1;
-    }
-
-    freeaddrinfo(result);
+    esp_err_t err = line_socket_connect(host, port, CONFIG_TTS_PIPER_TIMEOUT_MS, out_sock);
     if (err != ESP_OK) {
         ESP_LOGW(TAG, "Local TTS socket connect failed: host=%s port=%s", host, port);
-        return err;
     }
-
-    *out_sock = sock;
-    return ESP_OK;
+    return err;
 }
 
 /**

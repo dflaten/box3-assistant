@@ -36,7 +36,10 @@
 #include "hue/hue_client.h"
 #include "hue/hue_group_store.h"
 #include "board/ui_status.h"
+#include "stt/local_stt_client.h"
 #include "system/time_support.h"
+#include "timer/timer_parse.h"
+#include "timer/timer_runtime.h"
 #include "system/wifi_support.h"
 #include "tts/tts_player.h"
 #include "weather/weather_client.h"
@@ -57,6 +60,8 @@
 #define PRESENCE_TASK_STACK                  4096
 #define PRESENCE_TASK_PRIORITY               3
 #define PRESENCE_GPIO                        BSP_PMOD1_IO5
+#define TIMER_ALARM_CHIME_PERIOD_MS          1400
+#define TIMER_AUDIO_CHUNK_FRAMES             512
 
 static const char *TAG = "hue-voice";
 static const char *WAKE_WORD = "Hi ESP";
@@ -79,6 +84,11 @@ static void format_hue_probe_error_detail(esp_err_t probe_err, char *detail, siz
 static void
 format_hue_request_error_detail(const char *fallback, esp_err_t request_err, char *detail, size_t detail_size);
 static void format_weather_loading_detail(char *detail, size_t detail_size);
+static uint32_t monotonic_ms_now(void);
+static void show_timer_status(assistant_runtime_t *rt);
+static esp_err_t capture_timer_followup_audio(assistant_runtime_t *rt, uint8_t **out_pcm, size_t *out_size);
+static esp_err_t handle_set_timer_command(assistant_runtime_t *rt, char *detail, size_t detail_size);
+static esp_err_t handle_stop_timer_command(assistant_runtime_t *rt, char *detail, size_t detail_size);
 
 static const char *assistant_stage_name(assistant_stage_t stage) {
     switch (stage) {
@@ -161,6 +171,177 @@ static void format_weather_loading_detail(char *detail, size_t detail_size) {
 }
 
 /**
+ * @brief Read the current monotonic uptime in milliseconds.
+ * @return Milliseconds since boot, truncated to 32 bits.
+ */
+static uint32_t monotonic_ms_now(void) {
+    return (uint32_t) pdTICKS_TO_MS(xTaskGetTickCount());
+}
+
+/**
+ * @brief Render the active timer countdown or alarm state on screen.
+ * @param rt Shared assistant runtime state whose timer should be shown.
+ * @return This function does not return a value.
+ */
+static void show_timer_status(assistant_runtime_t *rt) {
+    if (!rt->timer.active) {
+        return;
+    }
+
+    char detail[24];
+    if (rt->timer.alarming) {
+        snprintf(detail, sizeof(detail), "00:00");
+        ui_status_set(UI_STATUS_TIMER_ALARM, detail);
+        return;
+    }
+
+    timer_runtime_format_remaining(&rt->timer, monotonic_ms_now(), detail, sizeof(detail));
+    ui_status_set(UI_STATUS_TIMER, detail);
+}
+
+/**
+ * @brief Capture a short mono PCM follow-up clip for timer duration transcription.
+ * @param rt Shared assistant runtime state whose microphone codec should be read.
+ * @param out_pcm Output pointer for the captured PCM16 mono bytes. Caller must free().
+ * @param out_size Output byte size for the captured PCM buffer.
+ * @return ESP_OK on success, or an ESP error code if capture fails or allocation is unavailable.
+ */
+static esp_err_t capture_timer_followup_audio(assistant_runtime_t *rt, uint8_t **out_pcm, size_t *out_size) {
+    if (rt == NULL || out_pcm == NULL || out_size == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    const size_t mono_samples = (size_t) ((CONFIG_LOCAL_STT_CAPTURE_MS * 16000ULL) / 1000ULL);
+    const size_t mono_bytes = mono_samples * sizeof(int16_t);
+    int16_t *mono_buffer = heap_caps_malloc(mono_bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (mono_buffer == NULL) {
+        mono_buffer = malloc(mono_bytes);
+    }
+    if (mono_buffer == NULL) {
+        return ESP_ERR_NO_MEM;
+    }
+
+    const size_t stereo_samples = (size_t) TIMER_AUDIO_CHUNK_FRAMES * 2U;
+    const size_t stereo_bytes = stereo_samples * sizeof(int16_t);
+    int16_t *stereo_buffer = heap_caps_malloc(stereo_bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (stereo_buffer == NULL) {
+        stereo_buffer = malloc(stereo_bytes);
+    }
+    if (stereo_buffer == NULL) {
+        free(mono_buffer);
+        return ESP_ERR_NO_MEM;
+    }
+
+    size_t captured = 0;
+    while (captured < mono_samples) {
+        int ret = esp_codec_dev_read(rt->mic_codec, stereo_buffer, stereo_bytes);
+        if (ret != ESP_CODEC_DEV_OK) {
+            free(stereo_buffer);
+            free(mono_buffer);
+            return ESP_FAIL;
+        }
+
+        size_t frames = TIMER_AUDIO_CHUNK_FRAMES;
+        if (frames > (mono_samples - captured)) {
+            frames = mono_samples - captured;
+        }
+
+        for (size_t i = 0; i < frames; ++i) {
+            mono_buffer[captured + i] = stereo_buffer[i * 2];
+        }
+        captured += frames;
+        rt->speech_progress_tick = xTaskGetTickCount();
+    }
+
+    free(stereo_buffer);
+    *out_pcm = (uint8_t *) mono_buffer;
+    *out_size = mono_bytes;
+    return ESP_OK;
+}
+
+/**
+ * @brief Capture, transcribe, and start a new timer countdown.
+ * @param rt Shared assistant runtime state that owns the timer.
+ * @param detail Destination buffer for user-visible success or failure text.
+ * @param detail_size Size of the destination buffer in bytes.
+ * @return ESP_OK on success, or an ESP error code if capture, transcription, or parsing fails.
+ */
+static esp_err_t handle_set_timer_command(assistant_runtime_t *rt, char *detail, size_t detail_size) {
+    if (rt == NULL || detail == NULL || detail_size == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (!local_stt_client_is_configured()) {
+        snprintf(detail, detail_size, "Timer voice service unavailable");
+        return ESP_ERR_NOT_SUPPORTED;
+    }
+
+    ui_status_set(UI_STATUS_LISTENING, "Say duration now");
+    sleep_with_speech_heartbeat(rt, pdMS_TO_TICKS(250));
+
+    TickType_t pause_wait_start = xTaskGetTickCount();
+    while (!rt->audio_feed_paused) {
+        if ((xTaskGetTickCount() - pause_wait_start) >= pdMS_TO_TICKS(500)) {
+            snprintf(detail, detail_size, "Timer audio capture failed");
+            return ESP_ERR_TIMEOUT;
+        }
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+
+    uint8_t *pcm = NULL;
+    size_t pcm_size = 0;
+    esp_err_t err = capture_timer_followup_audio(rt, &pcm, &pcm_size);
+    if (err != ESP_OK) {
+        snprintf(detail, detail_size, "Timer audio capture failed");
+        return err;
+    }
+
+    ui_status_set(UI_STATUS_WORKING, "Understanding timer");
+    char transcript[96];
+    err = local_stt_client_transcribe(pcm, pcm_size, 16000, 2, 1, transcript, sizeof(transcript));
+    free(pcm);
+    if (err != ESP_OK) {
+        snprintf(detail, detail_size, "Timer voice service unavailable");
+        return err;
+    }
+
+    uint32_t duration_seconds = 0;
+    if (!timer_parse_duration_text(transcript, CONFIG_TIMER_MAX_DURATION_SECONDS, &duration_seconds)) {
+        snprintf(detail, detail_size, "Could not understand timer");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    timer_runtime_start(&rt->timer, duration_seconds, monotonic_ms_now());
+    rt->direct_command_mode = false;
+    rt->direct_command_prepared = false;
+    timer_runtime_format_remaining(&rt->timer, monotonic_ms_now(), detail, detail_size);
+    return ESP_OK;
+}
+
+/**
+ * @brief Stop the active timer and clear any direct alarm-stop state.
+ * @param rt Shared assistant runtime state that owns the timer.
+ * @param detail Destination buffer for user-visible status text.
+ * @param detail_size Size of the destination buffer in bytes.
+ * @return ESP_OK when a timer was stopped, or ESP_ERR_INVALID_STATE when no timer is active.
+ */
+static esp_err_t handle_stop_timer_command(assistant_runtime_t *rt, char *detail, size_t detail_size) {
+    if (rt == NULL || detail == NULL || detail_size == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    if (!timer_runtime_stop(&rt->timer)) {
+        snprintf(detail, detail_size, "No timer is active");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    rt->direct_command_mode = false;
+    rt->direct_command_prepared = false;
+    snprintf(detail, detail_size, "Timer stopped");
+    return ESP_OK;
+}
+
+/**
  * @brief Reset the assistant back to standby mode.
  * @param rt Shared assistant runtime state to reset back to standby.
  * @return This function does not return a value.
@@ -170,6 +351,7 @@ static void return_to_standby(assistant_runtime_t *rt) {
     rt->assistant_awake = false;
     rt->assistant_awake_tick = 0;
     rt->speech_progress_tick = xTaskGetTickCount();
+    rt->direct_command_prepared = false;
     audio_feed_set_paused(rt, true);
     TickType_t wait_start = xTaskGetTickCount();
     while (rt->audio_feed_busy || !rt->audio_feed_paused) {
@@ -242,6 +424,11 @@ static void show_status_then_return_to_standby(assistant_runtime_t *rt,
  * @note When presence is still active, this draws the clock immediately to avoid flashing the ready screen first.
  */
 static void restore_idle_ui(assistant_runtime_t *rt) {
+    if (rt->timer.active) {
+        show_timer_status(rt);
+        return;
+    }
+
     TickType_t now = xTaskGetTickCount();
     bool motion_recent = rt->last_presence_motion_tick != 0 &&
                          (now - rt->last_presence_motion_tick) < pdMS_TO_TICKS(PRESENCE_TIMEOUT_MS);
@@ -306,6 +493,9 @@ static void presence_clock_task(void *arg) {
     TickType_t last_motion_tick = 0;
     bool display_owned_by_presence = false;
     bool last_clock_synced = false;
+    bool last_timer_alarming = false;
+    uint32_t last_timer_remaining_seconds = UINT32_MAX;
+    TickType_t last_alarm_chime_tick = 0;
 
     char time_text[24];
     char date_text[32];
@@ -319,11 +509,56 @@ static void presence_clock_task(void *arg) {
         const TickType_t now = xTaskGetTickCount();
         const bool motion_detected = gpio_get_level(PRESENCE_GPIO) > 0;
         const bool assistant_idle = !rt->assistant_awake && rt->assistant_stage == ASSISTANT_STAGE_STANDBY;
+        bool timer_expired_now = timer_runtime_update(&rt->timer, monotonic_ms_now());
 
         if (motion_detected) {
             last_motion_tick = now;
             rt->last_presence_motion_tick = now;
         }
+
+        if (timer_expired_now) {
+            rt->direct_command_mode = true;
+            rt->direct_command_prepared = false;
+            last_alarm_chime_tick = 0;
+        }
+
+        if (rt->timer.active) {
+            if (!assistant_idle) {
+                continue;
+            }
+
+            if (rt->timer.alarming) {
+                if (!display_owned_by_presence || !last_timer_alarming) {
+                    ui_status_set(UI_STATUS_TIMER_ALARM, "00:00");
+                    display_owned_by_presence = true;
+                }
+                if (last_alarm_chime_tick == 0 ||
+                    (now - last_alarm_chime_tick) >= pdMS_TO_TICKS(TIMER_ALARM_CHIME_PERIOD_MS)) {
+                    esp_err_t chime_err = board_audio_play_timer_chime();
+                    if (chime_err != ESP_OK) {
+                        ESP_LOGW(TAG, "Timer chime playback failed: %s", esp_err_to_name(chime_err));
+                    }
+                    last_alarm_chime_tick = now;
+                }
+                last_timer_alarming = true;
+                last_timer_remaining_seconds = 0;
+                continue;
+            }
+
+            uint32_t remaining_seconds = timer_runtime_remaining_seconds(&rt->timer, monotonic_ms_now());
+            if (!display_owned_by_presence || last_timer_alarming ||
+                remaining_seconds != last_timer_remaining_seconds) {
+                show_timer_status(rt);
+                display_owned_by_presence = true;
+            }
+            last_timer_alarming = false;
+            last_timer_remaining_seconds = remaining_seconds;
+            continue;
+        }
+
+        last_timer_alarming = false;
+        last_timer_remaining_seconds = UINT32_MAX;
+        last_alarm_chime_tick = 0;
 
         if (!assistant_idle) {
             display_owned_by_presence = false;
@@ -443,6 +678,9 @@ static void assistant_session_timeout_task(void *arg) {
                         cancel_err = hue_client_cancel_active_request();
                     }
                     if (cancel_err == ESP_ERR_INVALID_STATE) {
+                        cancel_err = local_stt_client_cancel_active_request();
+                    }
+                    if (cancel_err == ESP_ERR_INVALID_STATE) {
                         cancel_err = tts_player_cancel();
                     }
                     ESP_LOGE(TAG,
@@ -543,6 +781,8 @@ static esp_err_t init_models(assistant_runtime_t *rt) {
                                        ASSISTANT_CMD_SYNC_GROUPS,
                                        ASSISTANT_CMD_WEATHER_TODAY,
                                        ASSISTANT_CMD_WEATHER_TOMORROW,
+                                       ASSISTANT_CMD_SET_TIMER,
+                                       ASSISTANT_CMD_STOP,
                                        ASSISTANT_CMD_GROUP_BASE);
 }
 
@@ -653,6 +893,45 @@ static void speech_detect_task(void *arg) {
         rt->speech_progress_tick = xTaskGetTickCount();
 
         if (!rt->assistant_awake) {
+            if (rt->direct_command_mode) {
+                if (!rt->direct_command_prepared) {
+                    rt->multinet->clean(rt->model_data);
+                    rt->afe_handle->disable_wakenet(rt->afe_data);
+                    rt->direct_command_prepared = true;
+                }
+
+                esp_mn_state_t stop_state = rt->multinet->detect(rt->model_data, afe_result->data);
+                if (stop_state != ESP_MN_STATE_DETECTED) {
+                    continue;
+                }
+
+                esp_mn_results_t *stop_result = rt->multinet->get_results(rt->model_data);
+                if (stop_result == NULL || stop_result->num <= 0 || stop_result->command_id[0] != ASSISTANT_CMD_STOP) {
+                    rt->multinet->clean(rt->model_data);
+                    continue;
+                }
+
+                audio_feed_set_paused(rt, true);
+                rt->assistant_awake = true;
+                rt->assistant_awake_tick = xTaskGetTickCount();
+                rt->speech_progress_tick = rt->assistant_awake_tick;
+                rt->assistant_stage = ASSISTANT_STAGE_EXECUTING;
+                rt->current_command_id = ASSISTANT_CMD_STOP;
+                rt->execution_timeout_pending = false;
+                rt->execution_timeout_tick = 0;
+                assistant_diag_start_command(ASSISTANT_CMD_STOP, rt->assistant_stage);
+
+                char stop_detail[32];
+                esp_err_t stop_err = handle_stop_timer_command(rt, stop_detail, sizeof(stop_detail));
+                ui_status_set(stop_err == ESP_OK ? UI_STATUS_SUCCESS : UI_STATUS_ERROR, stop_detail);
+                assistant_diag_finish_command(stop_err);
+                clear_active_session(rt);
+                sleep_with_speech_heartbeat(rt, STATUS_HOLD_TIME);
+                restore_idle_ui(rt);
+                return_to_standby(rt);
+                continue;
+            }
+
             if (afe_result->wakeup_state == WAKENET_DETECTED) {
                 rt->assistant_awake = true;
                 wake_tick = xTaskGetTickCount();
@@ -662,6 +941,7 @@ static void speech_detect_task(void *arg) {
                 assistant_diag_capture_wake();
                 rt->multinet->clean(rt->model_data);
                 rt->afe_handle->disable_wakenet(rt->afe_data);
+                rt->direct_command_prepared = false;
                 ESP_LOGI(TAG, "Wake word detected: %s", WAKE_WORD);
                 esp_err_t ui_err = ui_status_try_set(UI_STATUS_LISTENING, NULL);
                 if (ui_err == ESP_ERR_TIMEOUT) {
@@ -755,6 +1035,8 @@ static void speech_detect_task(void *arg) {
                                                          ASSISTANT_CMD_SYNC_GROUPS,
                                                          ASSISTANT_CMD_WEATHER_TODAY,
                                                          ASSISTANT_CMD_WEATHER_TOMORROW,
+                                                         ASSISTANT_CMD_SET_TIMER,
+                                                         ASSISTANT_CMD_STOP,
                                                          ASSISTANT_CMD_GROUP_BASE);
             if (action_err != ESP_OK) {
                 format_hue_request_error_detail("Hue sync failed", action_err, action_detail, sizeof(action_detail));
@@ -800,6 +1082,13 @@ static void speech_detect_task(void *arg) {
                          "Hue action phase=after_format_error_detail detail=\"%s\"",
                          action_detail[0] != '\0' ? action_detail : "<empty>");
             }
+        } else if (dispatch.type == ASSISTANT_COMMAND_ACTION_SET_TIMER) {
+            action_err = handle_set_timer_command(rt, action_detail, sizeof(action_detail));
+            if (action_err == ESP_OK) {
+                hold_time = STATUS_HOLD_TIME;
+            }
+        } else if (dispatch.type == ASSISTANT_COMMAND_ACTION_STOP) {
+            action_err = handle_stop_timer_command(rt, action_detail, sizeof(action_detail));
         } else {
             if (dispatch.type == ASSISTANT_COMMAND_ACTION_UNKNOWN) {
                 ESP_LOGW(TAG, "Unhandled command id %d", command_id);
@@ -868,6 +1157,7 @@ void app_main(void) {
     rt->presence_clock_heartbeat_tick = startup_tick;
     rt->last_presence_motion_tick = 0;
     rt->speech_progress_tick = startup_tick;
+    timer_runtime_reset(&rt->timer);
 
     esp_err_t err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -914,6 +1204,8 @@ void app_main(void) {
                                                                                      ASSISTANT_CMD_SYNC_GROUPS,
                                                                                      ASSISTANT_CMD_WEATHER_TODAY,
                                                                                      ASSISTANT_CMD_WEATHER_TOMORROW,
+                                                                                     ASSISTANT_CMD_SET_TIMER,
+                                                                                     ASSISTANT_CMD_STOP,
                                                                                      ASSISTANT_CMD_GROUP_BASE)
                                                    : hue_probe_err;
     if (sync_err != ESP_OK) {
@@ -930,6 +1222,8 @@ void app_main(void) {
                                                     ASSISTANT_CMD_SYNC_GROUPS,
                                                     ASSISTANT_CMD_WEATHER_TODAY,
                                                     ASSISTANT_CMD_WEATHER_TOMORROW,
+                                                    ASSISTANT_CMD_SET_TIMER,
+                                                    ASSISTANT_CMD_STOP,
                                                     ASSISTANT_CMD_GROUP_BASE));
     }
 

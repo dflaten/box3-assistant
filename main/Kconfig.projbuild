@@ -89,4 +89,27 @@ config TTS_PIPER_VOLUME_PERCENT
     range 0 100
     default 55
 
+config LOCAL_STT_ENABLED
+    bool "Enable local STT for follow-up timer capture"
+    default y
+
+config LOCAL_STT_BASE_URL
+    string "Local STT base URL"
+    default ""
+
+config LOCAL_STT_TIMEOUT_MS
+    int "Local STT timeout in ms"
+    range 1000 30000
+    default 10000
+
+config LOCAL_STT_CAPTURE_MS
+    int "Timer follow-up capture duration in ms"
+    range 1000 10000
+    default 3000
+
+config TIMER_MAX_DURATION_SECONDS
+    int "Maximum accepted timer duration in seconds"
+    range 1 86400
+    default 86400
+
 endmenu
