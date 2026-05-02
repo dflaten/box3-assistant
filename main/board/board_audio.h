@@ -13,3 +13,4 @@ esp_err_t board_audio_write_pcm(const void *pcm_data, size_t pcm_size);
 esp_err_t board_audio_end_pcm(void);
 esp_err_t board_audio_play_pcm(
     const void *pcm_data, size_t pcm_size, uint32_t sample_rate, uint8_t channels, uint8_t bits_per_sample);
+esp_err_t board_audio_play_timer_chime(void);

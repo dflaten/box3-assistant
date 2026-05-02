@@ -1,4 +1,5 @@
 #include <stdbool.h>
+#include <stdint.h>
 
 #include "esp_codec_dev.h"
 #include "esp_check.h"
@@ -11,6 +12,22 @@
 static const char *TAG = "hue-voice";
 static esp_codec_dev_handle_t s_speaker_codec;
 static bool s_speaker_stream_open;
+static const int16_t s_sine64[] = {
+    0,      3212,   6393,   9512,   12539,  15446,  18204,  20787,  23170,  25329,  27245,  28898,  30273,
+    31356,  32137,  32609,  32767,  32609,  32137,  31356,  30273,  28898,  27245,  25329,  23170,  20787,
+    18204,  15446,  12539,  9512,   6393,   3212,   0,      -3212,  -6393,  -9512,  -12539, -15446, -18204,
+    -20787, -23170, -25329, -27245, -28898, -30273, -31356, -32137, -32609, -32767, -32609, -32137, -31356,
+    -30273, -28898, -27245, -25329, -23170, -20787, -18204, -15446, -12539, -9512,  -6393,  -3212,
+};
+
+/**
+ * @brief Read a signed sine sample from the fixed 64-step lookup table.
+ * @param phase 32-bit phase accumulator value.
+ * @return Signed PCM sample in the range of the sine table.
+ */
+static int16_t board_audio_sine_sample(uint32_t phase) {
+    return s_sine64[(phase >> 26) & 0x3FU];
+}
 
 /**
  * @brief Initialize the BOX-3 microphone codec for assistant speech capture.
@@ -165,4 +182,67 @@ esp_err_t board_audio_play_pcm(
     esp_err_t err = board_audio_write_pcm(pcm_data, pcm_size);
     esp_err_t close_err = board_audio_end_pcm();
     return err != ESP_OK ? err : close_err;
+}
+
+/**
+ * @brief Play a short two-tone timer chime through the BOX-3 speaker.
+ * @return ESP_OK on success, or an ESP error code if playback fails.
+ */
+esp_err_t board_audio_play_timer_chime(void) {
+    static const uint32_t sample_rate = 16000;
+    static const uint8_t channels = 1;
+    static const uint8_t bits_per_sample = 16;
+    static const size_t chunk_samples = 160;
+    static const uint32_t first_note_samples = 4000;
+    static const uint32_t second_note_samples = 4400;
+    static const uint32_t total_samples = first_note_samples + second_note_samples;
+    static const uint32_t attack_samples = 320;
+    static const uint32_t release_samples = 960;
+    static const int32_t peak_gain = 9000;
+    int16_t chunk[chunk_samples];
+    uint32_t phase_a = 0;
+    uint32_t phase_b = 0;
+    const uint32_t step_a = (uint32_t) (((uint64_t) 523 * 4294967296ULL) / sample_rate);
+    const uint32_t step_b = (uint32_t) (((uint64_t) 784 * 4294967296ULL) / sample_rate);
+
+    ESP_RETURN_ON_ERROR(board_audio_begin_pcm(sample_rate, channels, bits_per_sample), TAG, "Timer chime open failed");
+
+    for (uint32_t sample_index = 0; sample_index < total_samples; sample_index += chunk_samples) {
+        size_t samples_this_chunk = total_samples - sample_index;
+        if (samples_this_chunk > chunk_samples) {
+            samples_this_chunk = chunk_samples;
+        }
+
+        for (size_t i = 0; i < samples_this_chunk; ++i) {
+            uint32_t absolute_index = sample_index + (uint32_t) i;
+            bool first_note = absolute_index < first_note_samples;
+            uint32_t note_index = first_note ? absolute_index : (absolute_index - first_note_samples);
+            uint32_t note_samples = first_note ? first_note_samples : second_note_samples;
+            uint32_t phase = first_note ? phase_a : phase_b;
+            int32_t gain = peak_gain;
+
+            if (note_index < attack_samples) {
+                gain = (peak_gain * (int32_t) note_index) / (int32_t) attack_samples;
+            } else if (note_index + release_samples > note_samples) {
+                uint32_t remaining = note_samples - note_index;
+                gain = (peak_gain * (int32_t) remaining) / (int32_t) release_samples;
+            }
+
+            chunk[i] = (int16_t) ((board_audio_sine_sample(phase) * gain) / 32767);
+
+            if (first_note) {
+                phase_a += step_a;
+            } else {
+                phase_b += step_b;
+            }
+        }
+
+        esp_err_t err = board_audio_write_pcm(chunk, samples_this_chunk * sizeof(chunk[0]));
+        if (err != ESP_OK) {
+            board_audio_end_pcm();
+            return err;
+        }
+    }
+
+    return board_audio_end_pcm();
 }

@@ -59,6 +59,8 @@ cmake --build build --target unit-tests
 - This repo now uses a custom `partitions.csv`, so avoid deleting it when cleaning up build files.
 - Add documentation comments for new methods using the same Doxygen-style pattern already established in the codebase.
 - Add or extend unit tests for newly added methods when they contain host-testable logic.
+- Replace real LAN IPs, hostnames, and other environment-specific examples with placeholders before committing docs.
 - After making changes, run `make format` when C/C++ files were edited, `make test` when host-testable logic changed, and `make build` when firmware-facing code changed.
 - Run the host-side unit tests after changes to pure logic or formatting code, especially `assistant_state.c`, `assistant_command_text.c`, `weather_format.c`, or the unit-test harness itself.
 - Run `idf.py build` after changes that affect firmware integration, ESP-IDF-facing code, task orchestration, or component wiring.
+- If `gh pr edit` fails with the Projects classic GraphQL deprecation error, fall back to `gh api repos/<owner>/<repo>/pulls/<num> -X PATCH`.

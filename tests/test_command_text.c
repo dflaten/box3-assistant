@@ -20,6 +20,9 @@ static bool test_command_text_labels_builtin_and_hue_commands(void) {
                        "Weather today") == 0);
     ASSERT_TRUE(strcmp(assistant_command_text(ASSISTANT_CMD_WEATHER_TOMORROW, groups, 2, text, sizeof(text)),
                        "Weather tomorrow") == 0);
+    ASSERT_TRUE(strcmp(assistant_command_text(ASSISTANT_CMD_SET_TIMER, groups, 2, text, sizeof(text)), "Set a timer") ==
+                0);
+    ASSERT_TRUE(strcmp(assistant_command_text(ASSISTANT_CMD_STOP, groups, 2, text, sizeof(text)), "Stop") == 0);
 
     ASSERT_TRUE(strcmp(assistant_command_text(
                            hue_group_command_id(ASSISTANT_CMD_GROUP_BASE, 0, true), groups, 2, text, sizeof(text)),

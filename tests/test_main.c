@@ -10,8 +10,14 @@ extern const test_case_t g_command_text_tests[];
 extern const int g_command_text_test_count;
 extern const test_case_t g_hue_discovery_response_tests[];
 extern const int g_hue_discovery_response_test_count;
+extern const test_case_t g_local_stt_protocol_tests[];
+extern const int g_local_stt_protocol_test_count;
 extern const test_case_t g_weather_format_tests[];
 extern const int g_weather_format_test_count;
+extern const test_case_t g_timer_parse_tests[];
+extern const int g_timer_parse_test_count;
+extern const test_case_t g_timer_runtime_tests[];
+extern const int g_timer_runtime_test_count;
 
 static int s_failures;
 static int s_tests_run;
@@ -37,6 +43,9 @@ int main(void) {
     run_test_cases(g_command_dispatch_tests, g_command_dispatch_test_count);
     run_test_cases(g_command_text_tests, g_command_text_test_count);
     run_test_cases(g_hue_discovery_response_tests, g_hue_discovery_response_test_count);
+    run_test_cases(g_local_stt_protocol_tests, g_local_stt_protocol_test_count);
+    run_test_cases(g_timer_parse_tests, g_timer_parse_test_count);
+    run_test_cases(g_timer_runtime_tests, g_timer_runtime_test_count);
     run_test_cases(g_weather_format_tests, g_weather_format_test_count);
 
     if (s_failures != 0) {
