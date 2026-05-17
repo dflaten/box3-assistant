@@ -17,6 +17,7 @@
 
 #include "assistant_diagnostics.h"
 #include "assistant_runtime.h"
+#include "net/http_trace.h"
 #include "system/wifi_support.h"
 #include "weather/weather_open_meteo_provider.h"
 
@@ -25,11 +26,7 @@
 #define WEATHER_RETRY_DELAY_MS       250
 #define WEATHER_CM_PER_INCH          2.54f
 
-typedef struct {
-    char *body;
-    int capacity;
-    int len;
-} weather_http_trace_t;
+typedef http_trace_buffer_t weather_http_trace_t;
 
 static const char *TAG = "weather";
 static esp_http_client_handle_t s_active_client;
@@ -46,18 +43,8 @@ static bool weather_should_retry(esp_err_t err) {
  */
 static esp_err_t weather_http_event_handler(esp_http_client_event_t *evt) {
     weather_http_trace_t *trace = (weather_http_trace_t *) evt->user_data;
-    if (trace == NULL || trace->body == NULL || trace->capacity <= 0) {
-        return ESP_OK;
-    }
-
     if (evt->event_id == HTTP_EVENT_ON_DATA && evt->data != NULL && evt->data_len > 0) {
-        int remaining = trace->capacity - 1 - trace->len;
-        if (remaining > 0) {
-            int copy_len = evt->data_len < remaining ? evt->data_len : remaining;
-            memcpy(trace->body + trace->len, evt->data, copy_len);
-            trace->len += copy_len;
-            trace->body[trace->len] = '\0';
-        }
+        return http_trace_append(trace, (const char *) evt->data, evt->data_len);
     }
 
     return ESP_OK;
