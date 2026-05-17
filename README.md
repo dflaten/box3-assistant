@@ -65,14 +65,22 @@ Planned future work includes broader assistant speech reuse, richer UI, ChatGPT-
 
 ## Architecture
 
-The firmware is currently organized around a small set of runtime-oriented modules:
+The firmware is currently organized around assistant-core, feature, and device-support modules:
 
 | Module | Responsibility |
 | --- | --- |
-| `main/box3_assistant.c` | Boot flow, task startup, and top-level assistant orchestration |
-| `main/assistant_runtime.h` | Shared in-memory `assistant_runtime_t` state passed through assistant helpers and tasks |
+| `main/box3_assistant.c` | Thin firmware entrypoint that calls into assistant boot |
+| `main/assistant/boot.c` | Boot flow, subsystem initialization, and task startup |
+| `main/assistant/session.c` | Wake/listen/execute flow, idle UI restoration, and speech task ownership |
+| `main/assistant/watchdog.c` | Heartbeat monitoring, timeout cancellation, and forced recovery policy |
+| `main/assistant/presence.c` | Presence-triggered clock behavior and timer alarm display/chime ownership |
+| `main/assistant/command_registry.c` | Static mapping from resolved command actions to feature-owned handlers |
+| `main/assistant_runtime.h` | Shared compatibility runtime struct used across assistant subsystems |
 | `main/hue/hue_command_runtime.c` | Load stored Hue groups, sync groups from the bridge, and rebuild the runtime speech command table |
-| `main/assistant_command_text.c` | Format user-facing labels for built-in and Hue-backed commands |
+| `main/hue/hue_command_handler.c` | Hue sync and group on/off execution through the generic assistant command interface |
+| `main/weather/weather_command_handler.c` | Weather fetch, screen update, and optional spoken-response execution |
+| `main/timer/timer_command_handler.c` | Timer follow-up capture, STT transcription, parsing, and timer start/stop execution |
+| `main/commands/assistant_command_text.c` | Format user-facing labels for built-in and Hue-backed commands |
 | `main/assistant_state.c` | Pure assistant state and timeout decision helpers |
 | `main/assistant_diagnostics.c` | Persist lightweight reboot and command breadcrumbs for post-restart debugging |
 | `main/timer/timer_parse.c` | Parse transcribed timer durations and format countdown text |
@@ -80,10 +88,16 @@ The firmware is currently organized around a small set of runtime-oriented modul
 | `main/stt/local_stt_client.c` | Low-level local STT client for Wyoming `faster-whisper` follow-up transcription |
 | `main/stt/local_stt_protocol.c` | Pure Wyoming event parsing helpers used by the STT client and unit tests |
 | `main/net/line_socket.c` | Shared LAN socket helpers used by local TTS and local STT clients |
+| `main/net/http_trace.c` | Shared bounded HTTP response-body trace helper used by Hue and weather clients |
+| `main/net/request_cancel.h` | Shared helper for selecting the first active cancelable request |
 | `main/tts/local_tts_client.c` | Low-level local TTS client, including Piper socket-event synthesis and legacy HTTP/WAV handling |
 | `main/tts/tts_player.c` | Generic device speech facade used by assistant commands to speak text through the BOX-3 speaker |
 | `main/weather/weather_client.c` | Provider-agnostic weather facade used by the assistant flow and UI |
 | `main/weather/weather_open_meteo_provider.c` | Default Open-Meteo weather provider implementation behind the weather facade |
+| `main/board/ui_status.c` | Thin public UI facade around display, render, and idle-management entrypoints |
+| `main/board/ui_status_display.c` | Framebuffer allocation, LCD flush, and backlight/panel power control |
+| `main/board/ui_status_render.c` | Status/clock render policy and bitmap text layout |
+| `main/board/ui_status_font.c` | Built-in glyph table and glyph lookup helpers |
 
 ## Design Docs
 
@@ -494,18 +508,21 @@ Notes:
 
 ## Tests
 
-Host-side unit tests cover assistant state-machine decisions, command-label formatting, weather formatting regressions, timer parsing/runtime, and Wyoming STT protocol helpers, including the recovery logic for:
+Host-side unit tests cover assistant state-machine decisions, command dispatch and registry behavior, weather formatting regressions, timer parsing/runtime, Wyoming STT protocol helpers, and the shared transport helpers, including the recovery logic for:
 
 - listening timeout recovery
 - repeated missing AFE fetch recovery
 - empty MultiNet result recovery
 - assistant session timeout recovery
+- feature-handler registry lookup for built-in and Hue-backed actions
 - built-in and Hue command label formatting
+- shared HTTP trace buffering behavior
+- first-active request cancellation selection
 - timer duration parsing and countdown formatting
 - timer wraparound-safe runtime behavior
 - Wyoming transcript and error event classification
 
-The host test target does not currently exercise the ESP-IDF HTTP stack, persisted diagnostics module, or request-cancellation path.
+The host test target does not currently exercise the ESP-IDF HTTP stack itself, persisted diagnostics module, or the hardware-backed assistant session tasks.
 
 Run them with:
 
