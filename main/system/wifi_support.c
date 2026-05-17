@@ -113,3 +113,45 @@ esp_err_t wifi_init_sta(void) {
 bool wifi_is_connected(void) {
     return s_wifi_connected;
 }
+
+/**
+ * @brief Read the RSSI of the currently connected Wi-Fi access point.
+ * @return Current RSSI in dBm, or 0 when disconnected or unavailable.
+ */
+int8_t wifi_signal_rssi_dbm(void) {
+    if (!s_wifi_connected) {
+        return 0;
+    }
+
+    wifi_ap_record_t ap_info = {0};
+    esp_err_t err = esp_wifi_sta_get_ap_info(&ap_info);
+    if (err != ESP_OK) {
+        return 0;
+    }
+
+    return ap_info.rssi;
+}
+
+/**
+ * @brief Map the current Wi-Fi RSSI to a simple 0-4 signal-strength level.
+ * @return Signal level from 0 (disconnected/very weak) to 4 (strong).
+ */
+uint8_t wifi_signal_level(void) {
+    int8_t rssi = wifi_signal_rssi_dbm();
+    if (!s_wifi_connected || rssi == 0) {
+        return 0;
+    }
+    if (rssi >= -55) {
+        return 4;
+    }
+    if (rssi >= -67) {
+        return 3;
+    }
+    if (rssi >= -75) {
+        return 2;
+    }
+    if (rssi >= -85) {
+        return 1;
+    }
+    return 0;
+}

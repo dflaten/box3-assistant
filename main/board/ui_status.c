@@ -18,6 +18,7 @@
 #include "bsp/esp-box-3.h"
 
 #include "board/ui_status.h"
+#include "system/wifi_support.h"
 
 static const char *TAG = "hue-voice";
 
@@ -270,6 +271,37 @@ static void fill_rect(int x, int y, int w, int h, uint16_t color) {
 }
 
 /**
+ * @brief Draw a clipped rectangle outline in the framebuffer.
+ * @param x Left edge in pixels.
+ * @param y Top edge in pixels.
+ * @param w Rectangle width in pixels.
+ * @param h Rectangle height in pixels.
+ * @param thickness Outline thickness in pixels.
+ * @param color RGB565 outline color.
+ * @return This function does not return a value.
+ */
+static void draw_rect_outline(int x, int y, int w, int h, int thickness, uint16_t color) {
+    if (w <= 0 || h <= 0 || thickness <= 0) {
+        return;
+    }
+
+    if (thickness * 2 > w) {
+        thickness = w / 2;
+    }
+    if (thickness * 2 > h) {
+        thickness = h / 2;
+    }
+    if (thickness <= 0) {
+        thickness = 1;
+    }
+
+    fill_rect(x, y, w, thickness, color);
+    fill_rect(x, y + h - thickness, w, thickness, color);
+    fill_rect(x, y, thickness, h, color);
+    fill_rect(x + w - thickness, y, thickness, h, color);
+}
+
+/**
  * @brief Copy text into a buffer while converting it to uppercase.
  * @param dst Destination buffer for the uppercase result.
  * @param dst_size Size of the destination buffer in bytes.
@@ -299,6 +331,34 @@ static int text_width(const char *text, int scale) {
 }
 
 /**
+ * @brief Draw a single left-aligned line of text on the status screen.
+ * @param x Left pixel position for the rendered text.
+ * @param y Top pixel position for the text baseline block.
+ * @param scale Pixel scale factor for the built-in font.
+ * @param color RGB565 text color.
+ * @param text The text to render.
+ * @return This function does not return a value.
+ */
+static void draw_text(int x, int y, int scale, uint16_t color, const char *text) {
+    char upper[64];
+    uppercase_copy(upper, sizeof(upper), text);
+
+    const int char_width = 5 * scale;
+
+    for (size_t i = 0; upper[i] != '\0'; ++i) {
+        const glyph_t *glyph = find_glyph(upper[i]);
+        for (int row = 0; row < 7; ++row) {
+            for (int col = 0; col < 5; ++col) {
+                if (glyph->rows[row] & (1U << (4 - col))) {
+                    fill_rect(x + (col * scale), y + (row * scale), scale, scale, color);
+                }
+            }
+        }
+        x += char_width + UI_CHAR_SPACING;
+    }
+}
+
+/**
  * @brief Calculate the maximum number of monospaced characters that fit on one UI text line.
  * @param scale Pixel scale factor for the built-in font.
  * @return The maximum character count that fits within the screen width.
@@ -323,18 +383,31 @@ static void draw_text_centered(int y, int scale, uint16_t color, const char *tex
 
     int width = text_width(upper, scale);
     int x = (UI_SCREEN_WIDTH - width) / 2;
-    const int char_width = 5 * scale;
+    draw_text(x, y, scale, color, upper);
+}
 
-    for (size_t i = 0; upper[i] != '\0'; ++i) {
-        const glyph_t *glyph = find_glyph(upper[i]);
-        for (int row = 0; row < 7; ++row) {
-            for (int col = 0; col < 5; ++col) {
-                if (glyph->rows[row] & (1U << (4 - col))) {
-                    fill_rect(x + (col * scale), y + (row * scale), scale, scale, color);
-                }
-            }
+/**
+ * @brief Draw a compact Wi-Fi signal-strength icon in the top-right corner.
+ * @return This function does not return a value.
+ */
+static void draw_wifi_indicator(void) {
+    const uint8_t level = wifi_signal_level();
+    const uint16_t active = rgb565(255, 255, 255);
+    const int base_x = UI_SCREEN_WIDTH - 36;
+    const int base_y = 22;
+    const int bar_width = 4;
+    const int bar_gap = 3;
+    const int bar_heights[4] = {4, 8, 12, 16};
+
+    for (int i = 0; i < 4; ++i) {
+        const int x = base_x + (i * (bar_width + bar_gap));
+        const int h = bar_heights[i];
+        const int y = base_y - h;
+        if (i < level) {
+            fill_rect(x, y, bar_width, h, active);
+        } else {
+            draw_rect_outline(x, y, bar_width, h, 1, active);
         }
-        x += char_width + UI_CHAR_SPACING;
     }
 }
 
@@ -411,6 +484,7 @@ static void render_status(ui_status_state_t state, const char *detail) {
     const char *subtitle = state_subtitle(state);
 
     fill_rect(0, 0, UI_SCREEN_WIDTH, UI_SCREEN_HEIGHT, bg);
+    draw_wifi_indicator();
     if (title != NULL && title[0] != '\0') {
         draw_text_centered(28, UI_TITLE_SCALE, fg, title);
     }
@@ -436,6 +510,7 @@ static void render_clock(const char *time_text, const char *date_text, const cha
     const uint16_t muted = rgb565(191, 219, 254);
 
     fill_rect(0, 0, UI_SCREEN_WIDTH, UI_SCREEN_HEIGHT, bg);
+    draw_wifi_indicator();
     draw_text_centered(24, UI_BODY_SCALE, muted, "LOCAL TIME");
     draw_text_centered(72, UI_TITLE_SCALE, fg, time_text != NULL ? time_text : "");
     draw_text_centered(136, UI_BODY_SCALE, fg, date_text != NULL ? date_text : "");
