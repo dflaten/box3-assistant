@@ -57,7 +57,9 @@ cmake --build build --target unit-tests
 - If `idf.py` is not found, the environment is not active yet.
 - Use the repo `.clang-format` for C/C++ formatting changes when `clang-format` is available locally.
 - This repo now uses a custom `partitions.csv`, so avoid deleting it when cleaning up build files.
-- Add documentation comments for new methods using the same Doxygen-style pattern already established in the codebase.
+- Add documentation comments for every new non-trivial function, including static helpers, using the same Doxygen-style pattern already established in the codebase.
+- Minimum required Doxygen tags for documented functions are `@brief`, `@param`, and `@return`. Add `@note` when it provides useful behavioral or lifecycle context.
+- When refactoring code, backfill documentation comments for existing undocumented non-trivial functions that you touch or move.
 - Add or extend unit tests for newly added methods when they contain host-testable logic.
 - Replace real LAN IPs, hostnames, and other environment-specific examples with placeholders before committing docs.
 - After making changes, run `make format` when C/C++ files were edited, `make test` when host-testable logic changed, and `make build` when firmware-facing code changed.
