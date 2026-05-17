@@ -271,6 +271,37 @@ static void fill_rect(int x, int y, int w, int h, uint16_t color) {
 }
 
 /**
+ * @brief Draw a clipped rectangle outline in the framebuffer.
+ * @param x Left edge in pixels.
+ * @param y Top edge in pixels.
+ * @param w Rectangle width in pixels.
+ * @param h Rectangle height in pixels.
+ * @param thickness Outline thickness in pixels.
+ * @param color RGB565 outline color.
+ * @return This function does not return a value.
+ */
+static void draw_rect_outline(int x, int y, int w, int h, int thickness, uint16_t color) {
+    if (w <= 0 || h <= 0 || thickness <= 0) {
+        return;
+    }
+
+    if (thickness * 2 > w) {
+        thickness = w / 2;
+    }
+    if (thickness * 2 > h) {
+        thickness = h / 2;
+    }
+    if (thickness <= 0) {
+        thickness = 1;
+    }
+
+    fill_rect(x, y, w, thickness, color);
+    fill_rect(x, y + h - thickness, w, thickness, color);
+    fill_rect(x, y, thickness, h, color);
+    fill_rect(x + w - thickness, y, thickness, h, color);
+}
+
+/**
  * @brief Copy text into a buffer while converting it to uppercase.
  * @param dst Destination buffer for the uppercase result.
  * @param dst_size Size of the destination buffer in bytes.
@@ -361,9 +392,7 @@ static void draw_text_centered(int y, int scale, uint16_t color, const char *tex
  */
 static void draw_wifi_indicator(void) {
     const uint8_t level = wifi_signal_level();
-    const bool connected = wifi_is_connected();
-    const uint16_t active = connected ? rgb565(255, 255, 255) : rgb565(248, 113, 113);
-    const uint16_t inactive = connected ? rgb565(148, 163, 184) : rgb565(127, 29, 29);
+    const uint16_t active = rgb565(255, 255, 255);
     const int base_x = UI_SCREEN_WIDTH - 36;
     const int base_y = 22;
     const int bar_width = 4;
@@ -374,7 +403,11 @@ static void draw_wifi_indicator(void) {
         const int x = base_x + (i * (bar_width + bar_gap));
         const int h = bar_heights[i];
         const int y = base_y - h;
-        fill_rect(x, y, bar_width, h, i < level ? active : inactive);
+        if (i < level) {
+            fill_rect(x, y, bar_width, h, active);
+        } else {
+            draw_rect_outline(x, y, bar_width, h, 1, active);
+        }
     }
 }
 
