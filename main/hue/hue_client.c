@@ -19,6 +19,7 @@
 #include "assistant_runtime.h"
 #include "hue/hue_client.h"
 #include "hue/hue_discovery_response.h"
+#include "net/http_trace.h"
 #include "system/wifi_support.h"
 
 #define HUE_HTTP_TRACE_BODY_SIZE 2048
@@ -30,11 +31,7 @@
 #define HUE_SSDP_TIMEOUT_MS      1500
 #define HUE_SSDP_RESPONSE_SIZE   1024
 
-typedef struct {
-    char *body;
-    int capacity;
-    int len;
-} hue_http_trace_t;
+typedef http_trace_buffer_t hue_http_trace_t;
 
 static const char *TAG = "hue-voice";
 static esp_http_client_handle_t s_active_client;
@@ -233,20 +230,8 @@ static esp_err_t hue_bridge_ip_discover(char *out_ip, size_t out_ip_size) {
  */
 static esp_err_t hue_http_event_handler(esp_http_client_event_t *evt) {
     hue_http_trace_t *trace = (hue_http_trace_t *) evt->user_data;
-    if (trace == NULL || trace->body == NULL || trace->capacity <= 0) {
-        return ESP_OK;
-    }
-
     if (evt->event_id == HTTP_EVENT_ON_DATA && evt->data != NULL && evt->data_len > 0) {
-        int remaining = trace->capacity - 1 - trace->len;
-        if (remaining > 0) {
-            int copy_len = evt->data_len < remaining ? evt->data_len : remaining;
-            memcpy(trace->body + trace->len, evt->data, copy_len);
-            trace->len += copy_len;
-            if (trace->body != NULL) {
-                trace->body[trace->len] = '\0';
-            }
-        }
+        return http_trace_append(trace, (const char *) evt->data, evt->data_len);
     }
 
     return ESP_OK;
