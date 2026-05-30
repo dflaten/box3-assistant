@@ -150,7 +150,7 @@ Example:
 {
   "type": "synthesize",
   "data": {
-    "text": "Today in Fargo, it is 39 degrees and cloudy. The high is 64 and the low is 27."
+    "text": "Today in Your City, it is 39 degrees and cloudy. The high is 64 and the low is 27."
   }
 }
 ```
@@ -194,7 +194,7 @@ Do not read the compact screen string aloud.
 
 Build a separate spoken sentence such as:
 
-`Today in Fargo, it is 39 degrees and cloudy. The high is 64 and the low is 27. Wind is 10 miles per hour with a 1 percent chance of rain.`
+`Today in Your City, it is 39 degrees and cloudy. The high is 64 and the low is 27. Wind is 10 miles per hour with a 1 percent chance of rain.`
 
 This should be generated locally by firmware code from the parsed `weather_report_t`.
 
