@@ -145,9 +145,9 @@ void assistant_session_restore_idle_ui(assistant_runtime_t *rt) {
         bool clock_synced = time_support_format_now(time_text, sizeof(time_text), date_text, sizeof(date_text));
 
         if (clock_synced) {
-            ui_status_show_clock(time_text, date_text, CONFIG_ASSISTANT_LOCATION_NAME);
+            ui_status_show_clock(time_text, date_text, CONFIG_ASSISTANT_HOME_LOCATION_NAME);
         } else {
-            ui_status_show_clock("SYNCING TIME", "WAITING FOR NTP", CONFIG_ASSISTANT_LOCATION_NAME);
+            ui_status_show_clock("SYNCING TIME", "WAITING FOR NTP", CONFIG_ASSISTANT_HOME_LOCATION_NAME);
         }
         return;
     }
@@ -373,6 +373,8 @@ esp_err_t assistant_session_init_models(assistant_runtime_t *rt) {
                                        ASSISTANT_CMD_WEATHER_TOMORROW,
                                        ASSISTANT_CMD_SET_TIMER,
                                        ASSISTANT_CMD_STOP,
+                                       ASSISTANT_CMD_TIME_NOW,
+                                       ASSISTANT_CMD_TIME_IN_LOCATION,
                                        ASSISTANT_CMD_GROUP_BASE);
 }
 

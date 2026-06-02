@@ -33,6 +33,14 @@ void assistant_command_resolve(int command_id, size_t group_count, assistant_com
         out_dispatch->type = ASSISTANT_COMMAND_ACTION_STOP;
         return;
     }
+    if (command_id == ASSISTANT_CMD_TIME_NOW) {
+        out_dispatch->type = ASSISTANT_COMMAND_ACTION_TIME_NOW;
+        return;
+    }
+    if (command_id == ASSISTANT_CMD_TIME_IN_LOCATION) {
+        out_dispatch->type = ASSISTANT_COMMAND_ACTION_TIME_IN_LOCATION;
+        return;
+    }
 
     if (hue_decode_group_command_id(
             command_id, ASSISTANT_CMD_GROUP_BASE, group_count, &out_dispatch->group_index, &out_dispatch->on)) {

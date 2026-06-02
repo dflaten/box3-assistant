@@ -40,6 +40,8 @@ esp_err_t hue_command_runtime_rebuild(assistant_runtime_t *rt,
                                       int weather_tomorrow_command_id,
                                       int set_timer_command_id,
                                       int stop_command_id,
+                                      int time_now_command_id,
+                                      int time_in_location_command_id,
                                       int group_command_base) {
     if (!rt->commands_allocated) {
         ESP_RETURN_ON_ERROR(
@@ -59,6 +61,9 @@ esp_err_t hue_command_runtime_rebuild(assistant_runtime_t *rt,
     ESP_RETURN_ON_ERROR(add_runtime_phrase(set_timer_command_id, "set a timer"), TAG, "Failed to add timer command");
     ESP_RETURN_ON_ERROR(add_runtime_phrase(set_timer_command_id, "set timer"), TAG, "Failed to add timer command");
     ESP_RETURN_ON_ERROR(add_runtime_phrase(stop_command_id, "stop"), TAG, "Failed to add stop command");
+    ESP_RETURN_ON_ERROR(add_runtime_phrase(time_now_command_id, "what time is it"), TAG, "Failed to add time command");
+    ESP_RETURN_ON_ERROR(
+        add_runtime_phrase(time_in_location_command_id, "current time in"), TAG, "Failed to add remote time command");
 
     for (size_t i = 0; i < rt->group_count; ++i) {
         char on_phrase[96];
@@ -96,6 +101,8 @@ esp_err_t hue_command_runtime_sync_groups(assistant_runtime_t *rt,
                                           int weather_tomorrow_command_id,
                                           int set_timer_command_id,
                                           int stop_command_id,
+                                          int time_now_command_id,
+                                          int time_in_location_command_id,
                                           int group_command_base) {
     size_t synced_count = 0;
     ESP_RETURN_ON_ERROR(hue_client_sync_groups(rt->groups, ASSISTANT_MAX_SYNCED_GROUPS, &synced_count),
@@ -110,6 +117,8 @@ esp_err_t hue_command_runtime_sync_groups(assistant_runtime_t *rt,
                                                     weather_tomorrow_command_id,
                                                     set_timer_command_id,
                                                     stop_command_id,
+                                                    time_now_command_id,
+                                                    time_in_location_command_id,
                                                     group_command_base),
                         TAG,
                         "Failed to rebuild command table after Hue sync");

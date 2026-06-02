@@ -244,10 +244,12 @@ static esp_err_t weather_open_meteo_fetch_forecast(weather_forecast_day_t day, w
 
     double latitude = 0;
     double longitude = 0;
-    ESP_RETURN_ON_ERROR(
-        weather_parse_coordinate(CONFIG_WEATHER_LATITUDE, "latitude", &latitude), TAG, "Invalid weather latitude");
-    ESP_RETURN_ON_ERROR(
-        weather_parse_coordinate(CONFIG_WEATHER_LONGITUDE, "longitude", &longitude), TAG, "Invalid weather longitude");
+    ESP_RETURN_ON_ERROR(weather_parse_coordinate(CONFIG_ASSISTANT_HOME_LATITUDE, "latitude", &latitude),
+                        TAG,
+                        "Invalid weather latitude");
+    ESP_RETURN_ON_ERROR(weather_parse_coordinate(CONFIG_ASSISTANT_HOME_LONGITUDE, "longitude", &longitude),
+                        TAG,
+                        "Invalid weather longitude");
 
     char url[512];
     snprintf(url,
@@ -260,9 +262,9 @@ static esp_err_t weather_open_meteo_fetch_forecast(weather_forecast_day_t day, w
              CONFIG_WEATHER_BASE_URL,
              latitude,
              longitude,
-             CONFIG_WEATHER_TIMEZONE);
+             CONFIG_ASSISTANT_HOME_TIMEZONE);
 
-    ESP_LOGI(TAG, "Starting weather fetch day=%d for %s from %s", (int) day, CONFIG_ASSISTANT_LOCATION_NAME, url);
+    ESP_LOGI(TAG, "Starting weather fetch day=%d for %s from %s", (int) day, CONFIG_ASSISTANT_HOME_LOCATION_NAME, url);
     assistant_diag_update_detail(ASSISTANT_STAGE_EXECUTING, ASSISTANT_DIAG_DETAIL_WEATHER_START, day, 0, ESP_OK);
 
     esp_err_t err = ESP_FAIL;
@@ -420,7 +422,7 @@ static esp_err_t weather_open_meteo_fetch_forecast(weather_forecast_day_t day, w
         return err;
     }
 
-    snprintf(out_report->location, sizeof(out_report->location), "%s", CONFIG_ASSISTANT_LOCATION_NAME);
+    snprintf(out_report->location, sizeof(out_report->location), "%s", CONFIG_ASSISTANT_HOME_LOCATION_NAME);
     out_report->has_current_conditions = day == WEATHER_FORECAST_TODAY;
     out_report->current_temp_f = (int) (current_temp >= 0 ? current_temp + 0.5 : current_temp - 0.5);
     out_report->max_temp_f = (int) (max_temp >= 0 ? max_temp + 0.5 : max_temp - 0.5);
@@ -441,7 +443,7 @@ static esp_err_t weather_open_meteo_fetch_forecast(weather_forecast_day_t day, w
     ESP_LOGI(TAG,
              "%s weather day=%d date=%s now=%dF high=%dF low=%dF precip=%d%% precip_in=%.2f rain_in=%.2f "
              "showers_in=%.2f snow_in=%.2f precip_hours=%.1f wind=%dmph summary=%s",
-             CONFIG_ASSISTANT_LOCATION_NAME,
+             CONFIG_ASSISTANT_HOME_LOCATION_NAME,
              day_index,
              out_report->date,
              out_report->current_temp_f,

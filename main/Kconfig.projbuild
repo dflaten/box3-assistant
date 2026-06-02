@@ -30,28 +30,41 @@ config HUE_MIC_GAIN_DB
     range 0 37
     default 30
 
+config ASSISTANT_HOME_LOCATION_NAME
+    string "Assistant home location name"
+    default "New York City, NY"
+
+config ASSISTANT_HOME_LATITUDE
+    string "Assistant home latitude"
+    default "40.7128"
+
+config ASSISTANT_HOME_LONGITUDE
+    string "Assistant home longitude"
+    default "-74.0060"
+
+config ASSISTANT_HOME_TIMEZONE
+    string "Assistant home timezone"
+    default "America/New_York"
+
 config WEATHER_BASE_URL
     string "Weather provider base URL"
     default "https://api.open-meteo.com"
 
-config ASSISTANT_LOCATION_NAME
-    string "Assistant location name"
-    default "New York City, NY"
-
-config WEATHER_LATITUDE
-    string "Weather latitude"
-    default "40.7128"
-
-config WEATHER_LONGITUDE
-    string "Weather longitude"
-    default "-74.0060"
-
-config WEATHER_TIMEZONE
-    string "Weather timezone"
-    default "America/New_York"
-
 config WEATHER_TIMEOUT_MS
     int "Weather request timeout in ms"
+    range 1000 30000
+    default 8000
+
+config TIME_LOOKUP_BASE_URL
+    string "Time lookup provider base URL"
+    default "https://api.open-meteo.com"
+
+config TIME_GEOCODING_BASE_URL
+    string "Time geocoding provider base URL"
+    default "https://geocoding-api.open-meteo.com"
+
+config TIME_LOOKUP_TIMEOUT_MS
+    int "Time lookup request timeout in ms"
     range 1000 30000
     default 8000
 
@@ -90,7 +103,7 @@ config TTS_PIPER_VOLUME_PERCENT
     default 55
 
 config LOCAL_STT_ENABLED
-    bool "Enable local STT for follow-up timer capture"
+    bool "Enable local STT for follow-up voice capture"
     default y
 
 config LOCAL_STT_BASE_URL
@@ -103,7 +116,7 @@ config LOCAL_STT_TIMEOUT_MS
     default 10000
 
 config LOCAL_STT_CAPTURE_MS
-    int "Timer follow-up capture duration in ms"
+    int "Follow-up voice capture duration in ms"
     range 1000 10000
     default 3000
 

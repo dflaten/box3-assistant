@@ -19,14 +19,11 @@ To regenerate `sdkconfig` from both defaults files:
 
 ```fish
 cd /home/<user-name>/projects/esp-projects/box3-assistant
-get_idf
-set -x SDKCONFIG_DEFAULTS "sdkconfig.defaults;sdkconfig.defaults.local"
-rm -f sdkconfig sdkconfig.old
-idf.py reconfigure
-idf.py build
+make config-local
+make build
 ```
 
-The `set -x SDKCONFIG_DEFAULTS ...` command only applies to the current shell session. Set it again in each new terminal when regenerating `sdkconfig`.
+`make config-local` regenerates `sdkconfig` from `sdkconfig.defaults` and `sdkconfig.defaults.local`.
 
 ## Wi-Fi And Hue
 
@@ -40,24 +37,24 @@ CONFIG_HUE_BRIDGE_API_KEY="your-hue-api-key"
 
 The firmware discovers and caches the Hue bridge address automatically, so a Hue bridge IP is not required for normal setup.
 
-## Weather
+## Home Location
 
-The weather command target is configurable through `menuconfig` or `sdkconfig.defaults.local`. The tracked defaults use Open-Meteo for New York City.
+The assistant home location is configurable through `menuconfig` or `sdkconfig.defaults.local`. Weather and the default time command both use this shared home value, so changing home only requires updating one location block. The tracked defaults use New York City.
 
 Example local override:
 
 ```text
-CONFIG_ASSISTANT_LOCATION_NAME="Your City, ST"
-CONFIG_WEATHER_LATITUDE="00.0000"
-CONFIG_WEATHER_LONGITUDE="00.0000"
-CONFIG_WEATHER_TIMEZONE="America/Chicago"
+CONFIG_ASSISTANT_HOME_LOCATION_NAME="Your City, ST"
+CONFIG_ASSISTANT_HOME_LATITUDE="00.0000"
+CONFIG_ASSISTANT_HOME_LONGITUDE="00.0000"
+CONFIG_ASSISTANT_HOME_TIMEZONE="America/Chicago"
 ```
 
-Other weather settings, including `CONFIG_WEATHER_BASE_URL` and `CONFIG_WEATHER_TIMEOUT_MS`, are available through `menuconfig`.
+Other weather settings, including `CONFIG_WEATHER_BASE_URL` and `CONFIG_WEATHER_TIMEOUT_MS`, are available through `menuconfig`. Remote time lookup has separate provider settings, including `CONFIG_TIME_LOOKUP_BASE_URL`, `CONFIG_TIME_GEOCODING_BASE_URL`, and `CONFIG_TIME_LOOKUP_TIMEOUT_MS`, so the time feature can keep using its own provider if weather moves away from Open-Meteo.
 
 ## Local TTS
 
-Local speech output is optional. The current implementation targets a Piper service running on the LAN and is used for spoken weather responses.
+Local speech output is optional. The current implementation targets a Piper service running on the LAN and is used for spoken weather and time responses.
 
 The working Piper integration uses a raw TCP socket event protocol. The firmware sends one newline-terminated JSON request and reads newline-delimited events such as `audio-start`, `audio-chunk`, and `audio-stop`.
 
@@ -76,7 +73,7 @@ Volume is controlled by `CONFIG_TTS_PIPER_VOLUME_PERCENT`.
 
 ## Local STT
 
-Dynamic timers use a local Wyoming speech-to-text service on the LAN. The current implementation is designed around `wyoming-faster-whisper`.
+Dynamic timers and remote time lookups use a local Wyoming speech-to-text service on the LAN. The current implementation is designed around `wyoming-faster-whisper`.
 
 Recommended local defaults:
 

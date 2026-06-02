@@ -3,12 +3,13 @@ SHELL := /bin/bash
 PORT ?= /dev/ttyACM0
 FISH_RUN = fish -lc 'cd $(CURDIR); get_idf; $(1)'
 
-.PHONY: help format test build rebuild flash monitor deploy sdkconfig-from-main sdkconfig-to-main
+.PHONY: help format test config-local build rebuild flash monitor deploy sdkconfig-from-main sdkconfig-to-main
 
 help:
 	@printf '%s\n' \
 		'make format   Format all C/C++ sources with clang-format' \
 		'make test     Run host-side unit tests' \
+		'make config-local  Regenerate sdkconfig from defaults plus sdkconfig.defaults.local' \
 		'make build    Build the firmware with ESP-IDF' \
 		'make rebuild  Run a fullclean firmware build' \
 		'make flash    Build and flash to $(PORT)' \
@@ -22,6 +23,9 @@ format:
 
 test:
 	./tests/run_unit_tests.sh
+
+config-local:
+	$(call FISH_RUN,set -x SDKCONFIG_DEFAULTS "sdkconfig.defaults;sdkconfig.defaults.local"; rm -f sdkconfig sdkconfig.old; idf.py reconfigure)
 
 build:
 	$(call FISH_RUN,idf.py build)

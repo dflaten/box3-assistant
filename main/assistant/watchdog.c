@@ -12,6 +12,7 @@
 #include "net/request_cancel.h"
 #include "hue/hue_client.h"
 #include "stt/local_stt_client.h"
+#include "time/time_client.h"
 #include "tts/tts_player.h"
 #include "weather/weather_client.h"
 
@@ -65,6 +66,7 @@ static void assistant_session_timeout_task(void *arg) {
         weather_client_cancel_active_request,
         hue_client_cancel_active_request,
         local_stt_client_cancel_active_request,
+        time_client_cancel_active_request,
         tts_player_cancel,
     };
 
@@ -127,7 +129,8 @@ static void assistant_session_timeout_task(void *arg) {
                     rt->execution_timeout_tick = now;
                     rt->speech_progress_tick = now;
                     assistant_diag_mark_timeout(rt->assistant_stage);
-                    esp_err_t cancel_err = request_cancel_first_active(cancel_fns, 4);
+                    esp_err_t cancel_err =
+                        request_cancel_first_active(cancel_fns, sizeof(cancel_fns) / sizeof(cancel_fns[0]));
                     ESP_LOGE(TAG,
                              "Assistant execution exceeded %d ms for command_id=%d; cancel result=%s",
                              ASSISTANT_SESSION_TIMEOUT_MS,
