@@ -106,6 +106,8 @@ static esp_err_t hue_command_execute(const assistant_command_context_t *context,
                                                           ASSISTANT_CMD_WEATHER_TOMORROW,
                                                           ASSISTANT_CMD_SET_TIMER,
                                                           ASSISTANT_CMD_STOP,
+                                                          ASSISTANT_CMD_TIME_NOW,
+                                                          ASSISTANT_CMD_TIME_IN_LOCATION,
                                                           ASSISTANT_CMD_GROUP_BASE);
         if (out_result->err != ESP_OK) {
             hue_command_handler_format_request_error(

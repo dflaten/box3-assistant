@@ -102,6 +102,8 @@ void assistant_boot_start(void) {
                                                                                      ASSISTANT_CMD_WEATHER_TOMORROW,
                                                                                      ASSISTANT_CMD_SET_TIMER,
                                                                                      ASSISTANT_CMD_STOP,
+                                                                                     ASSISTANT_CMD_TIME_NOW,
+                                                                                     ASSISTANT_CMD_TIME_IN_LOCATION,
                                                                                      ASSISTANT_CMD_GROUP_BASE)
                                                    : hue_probe_err;
     if (sync_err != ESP_OK) {
@@ -120,6 +122,8 @@ void assistant_boot_start(void) {
                                                     ASSISTANT_CMD_WEATHER_TOMORROW,
                                                     ASSISTANT_CMD_SET_TIMER,
                                                     ASSISTANT_CMD_STOP,
+                                                    ASSISTANT_CMD_TIME_NOW,
+                                                    ASSISTANT_CMD_TIME_IN_LOCATION,
                                                     ASSISTANT_CMD_GROUP_BASE));
     }
 

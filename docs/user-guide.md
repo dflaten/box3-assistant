@@ -13,6 +13,8 @@ Always-available commands:
 - `update groups from hue`
 - `weather today`
 - `weather tomorrow`
+- `what time is it`
+- `current time in`
 - `set a timer`
 - `stop`
 
@@ -72,6 +74,22 @@ The weather screen shows:
 
 Weather failures are shown as `Weather network error`, `Weather timeout`, or `Weather unavailable`.
 
+## Time
+
+Say `what time is it` to hear the current time for the configured home location.
+
+Say `current time in` to look up the current time for another city.
+
+The remote time flow:
+
+1. say `Hi ESP`
+2. say `current time in`
+3. say a city, state, or country, such as `Chicago Illinois` or `London England`
+4. wait for the local STT service to transcribe the location
+5. hear the local time for the resolved location
+
+Remote time lookup uses the time feature's configured lookup provider and requires a reachable local Wyoming-compatible STT service for the city follow-up phrase.
+
 ## Timers
 
 Say `set a timer` to start a timer with a short follow-up phrase.
@@ -94,6 +112,7 @@ Dynamic timers require a reachable local Wyoming-compatible STT service.
 - Hue groups may need to be synced again after reflashing if the `storage` partition is erased or rewritten
 - spoken weather requires a reachable local Piper-compatible TTS service
 - dynamic timers require a reachable local Wyoming-compatible STT service
+- remote time lookup requires a reachable local Wyoming-compatible STT service
 - only one timer is supported at a time
 - timers do not persist across reboot
 - the BOX-3 playback path currently uses 16 kHz I2S output to match the active microphone/AFE path

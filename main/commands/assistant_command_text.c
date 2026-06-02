@@ -22,6 +22,12 @@ const char *assistant_command_text(
     if (command_id == ASSISTANT_CMD_STOP) {
         return "Stop";
     }
+    if (command_id == ASSISTANT_CMD_TIME_NOW) {
+        return "What time is it";
+    }
+    if (command_id == ASSISTANT_CMD_TIME_IN_LOCATION) {
+        return "Current time in";
+    }
 
     size_t index = 0;
     bool on = false;

@@ -202,11 +202,11 @@ static void presence_clock_task(void *arg) {
 
         if (should_redraw) {
             if (clock_synced) {
-                ui_status_show_clock(time_text, date_text, CONFIG_ASSISTANT_LOCATION_NAME);
+                ui_status_show_clock(time_text, date_text, CONFIG_ASSISTANT_HOME_LOCATION_NAME);
                 strlcpy(last_time_text, time_text, sizeof(last_time_text));
                 strlcpy(last_date_text, date_text, sizeof(last_date_text));
             } else {
-                ui_status_show_clock("SYNCING TIME", "WAITING FOR NTP", CONFIG_ASSISTANT_LOCATION_NAME);
+                ui_status_show_clock("SYNCING TIME", "WAITING FOR NTP", CONFIG_ASSISTANT_HOME_LOCATION_NAME);
                 last_time_text[0] = '\0';
                 last_date_text[0] = '\0';
             }

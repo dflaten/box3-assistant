@@ -51,7 +51,7 @@ esp_err_t time_support_init(void) {
         return ESP_OK;
     }
 
-    const char *posix_tz = timezone_to_posix(CONFIG_WEATHER_TIMEZONE);
+    const char *posix_tz = timezone_to_posix(CONFIG_ASSISTANT_HOME_TIMEZONE);
     if (setenv("TZ", posix_tz, 1) != 0) {
         ESP_LOGE(TAG, "Failed to set timezone to %s", posix_tz);
         return ESP_FAIL;
@@ -68,7 +68,7 @@ esp_err_t time_support_init(void) {
     }
 
     s_time_support_initialized = true;
-    ESP_LOGI(TAG, "Time sync started for timezone %s (TZ=%s)", CONFIG_WEATHER_TIMEZONE, posix_tz);
+    ESP_LOGI(TAG, "Time sync started for timezone %s (TZ=%s)", CONFIG_ASSISTANT_HOME_TIMEZONE, posix_tz);
     return ESP_OK;
 }
 

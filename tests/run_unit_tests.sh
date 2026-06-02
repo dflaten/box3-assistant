@@ -3,6 +3,8 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${ROOT_DIR}/tests/build"
+IDF_PATH="${IDF_PATH:-/home/david/.espressif/v5.5.3/esp-idf}"
+CJSON_DIR="${IDF_PATH}/components/json/cJSON"
 
 mkdir -p "${BUILD_DIR}"
 
@@ -12,6 +14,7 @@ cc -std=c11 -Wall -Wextra -Werror \
     -I"${ROOT_DIR}/main/commands" \
     -I"${ROOT_DIR}/main/weather" \
     -I"${ROOT_DIR}/main/hue" \
+    -I"${CJSON_DIR}" \
     "${ROOT_DIR}/tests/test_main.c" \
     "${ROOT_DIR}/tests/test_assistant_state.c" \
     "${ROOT_DIR}/tests/test_command_dispatch.c" \
@@ -23,6 +26,8 @@ cc -std=c11 -Wall -Wextra -Werror \
     "${ROOT_DIR}/tests/test_request_cancel.c" \
     "${ROOT_DIR}/tests/test_timer_parse.c" \
     "${ROOT_DIR}/tests/test_timer_runtime.c" \
+    "${ROOT_DIR}/tests/test_time_format.c" \
+    "${ROOT_DIR}/tests/test_time_open_meteo_parse.c" \
     "${ROOT_DIR}/tests/test_weather_format.c" \
     "${ROOT_DIR}/main/assistant/command_registry.c" \
     "${ROOT_DIR}/main/commands/assistant_command_dispatch.c" \
@@ -34,7 +39,10 @@ cc -std=c11 -Wall -Wextra -Werror \
     "${ROOT_DIR}/main/stt/local_stt_protocol.c" \
     "${ROOT_DIR}/main/timer/timer_parse.c" \
     "${ROOT_DIR}/main/timer/timer_runtime.c" \
+    "${ROOT_DIR}/main/time/time_format.c" \
+    "${ROOT_DIR}/main/time/time_open_meteo_parse.c" \
     "${ROOT_DIR}/main/weather/weather_format.c" \
+    "${CJSON_DIR}/cJSON.c" \
     -o "${BUILD_DIR}/unit_tests"
 
 "${BUILD_DIR}/unit_tests"
