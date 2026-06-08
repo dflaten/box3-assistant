@@ -8,6 +8,7 @@
 #include "esp_err.h"
 #include "esp_log.h"
 
+#include "board/board_audio.h"
 #include "board/ui_status.h"
 #include "board/ui_status_display.h"
 #include "board/ui_status_render.h"
@@ -133,7 +134,7 @@ void ui_status_set(ui_status_state_t state, const char *detail) {
     esp_err_t power_err = ui_status_display_power_set(s_panel, s_ready, &s_display_on, true);
     esp_err_t flush_err = ESP_OK;
     if (power_err == ESP_OK) {
-        ui_status_render_status(s_frame_buffer, state, detail);
+        ui_status_render_status(s_frame_buffer, state, detail, board_audio_get_volume_percent());
         flush_err = ui_status_display_flush(s_panel, s_frame_buffer);
     }
     ui_render_end();
@@ -168,7 +169,7 @@ esp_err_t ui_status_try_set(ui_status_state_t state, const char *detail) {
     esp_err_t power_err = ui_status_display_power_set(s_panel, s_ready, &s_display_on, true);
     esp_err_t flush_err = ESP_OK;
     if (power_err == ESP_OK) {
-        ui_status_render_status(s_frame_buffer, state, detail);
+        ui_status_render_status(s_frame_buffer, state, detail, board_audio_get_volume_percent());
         flush_err = ui_status_display_flush(s_panel, s_frame_buffer);
     }
     ui_render_end();
@@ -208,7 +209,7 @@ void ui_status_show_clock(const char *time_text, const char *date_text, const ch
     esp_err_t power_err = ui_status_display_power_set(s_panel, s_ready, &s_display_on, true);
     esp_err_t flush_err = ESP_OK;
     if (power_err == ESP_OK) {
-        ui_status_render_clock(s_frame_buffer, time_text, date_text, location_text);
+        ui_status_render_clock(s_frame_buffer, time_text, date_text, location_text, board_audio_get_volume_percent());
         flush_err = ui_status_display_flush(s_panel, s_frame_buffer);
     }
     ui_render_end();

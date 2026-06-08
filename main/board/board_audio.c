@@ -12,6 +12,7 @@
 static const char *TAG = "hue-voice";
 static esp_codec_dev_handle_t s_speaker_codec;
 static bool s_speaker_stream_open;
+static uint8_t s_speaker_volume_percent = CONFIG_TTS_PIPER_VOLUME_PERCENT;
 static const int16_t s_sine64[] = {
     0,      3212,   6393,   9512,   12539,  15446,  18204,  20787,  23170,  25329,  27245,  28898,  30273,
     31356,  32137,  32609,  32767,  32609,  32137,  31356,  30273,  28898,  27245,  25329,  23170,  20787,
@@ -78,12 +79,41 @@ esp_err_t board_audio_init_speaker(void) {
         return ESP_FAIL;
     }
 
-    int ret = esp_codec_dev_set_out_vol(s_speaker_codec, CONFIG_TTS_PIPER_VOLUME_PERCENT);
+    int ret = esp_codec_dev_set_out_vol(s_speaker_codec, s_speaker_volume_percent);
     if (ret != ESP_CODEC_DEV_OK) {
         ESP_LOGW(TAG, "Unable to set speaker volume: %d", ret);
     }
 
     return ESP_OK;
+}
+
+/**
+ * @brief Set the BOX-3 speaker output volume.
+ * @param volume_percent Desired output volume from 0 through 100 percent.
+ * @return ESP_OK on success, ESP_ERR_INVALID_ARG for an out-of-range value, or ESP_FAIL when the codec rejects it.
+ */
+esp_err_t board_audio_set_volume_percent(uint8_t volume_percent) {
+    if (volume_percent > 100) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    ESP_RETURN_ON_ERROR(board_audio_init_speaker(), TAG, "Speaker init failed");
+    int ret = esp_codec_dev_set_out_vol(s_speaker_codec, volume_percent);
+    if (ret != ESP_CODEC_DEV_OK) {
+        ESP_LOGW(TAG, "Unable to set speaker volume: %d", ret);
+        return ESP_FAIL;
+    }
+
+    s_speaker_volume_percent = volume_percent;
+    return ESP_OK;
+}
+
+/**
+ * @brief Read the current BOX-3 speaker output volume.
+ * @return Current output volume from 0 through 100 percent.
+ */
+uint8_t board_audio_get_volume_percent(void) {
+    return s_speaker_volume_percent;
 }
 
 /**

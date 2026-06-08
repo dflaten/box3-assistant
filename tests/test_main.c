@@ -20,6 +20,8 @@ extern const test_case_t g_request_cancel_tests[];
 extern const int g_request_cancel_test_count;
 extern const test_case_t g_weather_format_tests[];
 extern const int g_weather_format_test_count;
+extern const test_case_t g_volume_control_tests[];
+extern const int g_volume_control_test_count;
 extern const test_case_t g_timer_parse_tests[];
 extern const int g_timer_parse_test_count;
 extern const test_case_t g_timer_runtime_tests[];
@@ -62,6 +64,7 @@ int main(void) {
     run_test_cases(g_time_format_tests, g_time_format_test_count);
     run_test_cases(g_time_open_meteo_parse_tests, g_time_open_meteo_parse_test_count);
     run_test_cases(g_weather_format_tests, g_weather_format_test_count);
+    run_test_cases(g_volume_control_tests, g_volume_control_test_count);
 
     if (s_failures != 0) {
         fprintf(stderr, "%d/%d tests failed\n", s_failures, s_tests_run);

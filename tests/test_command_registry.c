@@ -21,6 +21,10 @@ static const assistant_command_handler_t s_time_handler = {
     .action = ASSISTANT_COMMAND_ACTION_TIME_NOW,
     .execute = NULL,
 };
+static const assistant_command_handler_t s_volume_handler = {
+    .action = ASSISTANT_COMMAND_ACTION_VOLUME_UP,
+    .execute = NULL,
+};
 
 const assistant_command_handler_t *hue_command_handler_get(void) {
     return &s_hue_handler;
@@ -36,6 +40,10 @@ const assistant_command_handler_t *weather_command_handler_get(void) {
 
 const assistant_command_handler_t *time_command_handler_get(void) {
     return &s_time_handler;
+}
+
+const assistant_command_handler_t *volume_command_handler_get(void) {
+    return &s_volume_handler;
 }
 
 static bool test_command_registry_routes_builtin_actions_to_feature_handlers(void) {
@@ -57,6 +65,16 @@ static bool test_command_registry_routes_builtin_actions_to_feature_handlers(voi
     ASSERT_TRUE(assistant_command_registry_lookup(ASSISTANT_CMD_TIME_NOW, 2, &dispatch, &handler));
     ASSERT_EQ_INT(ASSISTANT_COMMAND_ACTION_TIME_NOW, dispatch.type);
     ASSERT_TRUE(handler == &s_time_handler);
+
+    ASSERT_TRUE(assistant_command_registry_lookup(ASSISTANT_CMD_VOLUME_UP_BASE + 4, 2, &dispatch, &handler));
+    ASSERT_EQ_INT(ASSISTANT_COMMAND_ACTION_VOLUME_UP, dispatch.type);
+    ASSERT_EQ_INT(5, dispatch.volume_steps);
+    ASSERT_TRUE(handler == &s_volume_handler);
+
+    ASSERT_TRUE(assistant_command_registry_lookup(ASSISTANT_CMD_VOLUME_DOWN_BASE + 9, 2, &dispatch, &handler));
+    ASSERT_EQ_INT(ASSISTANT_COMMAND_ACTION_VOLUME_DOWN, dispatch.type);
+    ASSERT_EQ_INT(10, dispatch.volume_steps);
+    ASSERT_TRUE(handler == &s_volume_handler);
 
     ASSERT_TRUE(assistant_command_registry_lookup(ASSISTANT_CMD_TIME_IN_LOCATION, 2, &dispatch, &handler));
     ASSERT_EQ_INT(ASSISTANT_COMMAND_ACTION_TIME_IN_LOCATION, dispatch.type);

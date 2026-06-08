@@ -4,6 +4,7 @@
 #include "hue/hue_command_handler.h"
 #include "time/time_command_handler.h"
 #include "timer/timer_command_handler.h"
+#include "volume/volume_command_handler.h"
 #include "weather/weather_command_handler.h"
 
 /**
@@ -41,6 +42,10 @@ bool assistant_command_registry_lookup(int command_id,
     case ASSISTANT_COMMAND_ACTION_TIME_NOW:
     case ASSISTANT_COMMAND_ACTION_TIME_IN_LOCATION:
         *out_handler = time_command_handler_get();
+        break;
+    case ASSISTANT_COMMAND_ACTION_VOLUME_UP:
+    case ASSISTANT_COMMAND_ACTION_VOLUME_DOWN:
+        *out_handler = volume_command_handler_get();
         break;
     case ASSISTANT_COMMAND_ACTION_UNKNOWN:
     default:

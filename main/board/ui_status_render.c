@@ -3,6 +3,7 @@
 #include <ctype.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "bsp/esp-box-3.h"
@@ -28,6 +29,7 @@ static void draw_text(uint16_t *frame_buffer, int x, int y, int scale, uint16_t 
 static int max_chars_per_line(int scale);
 static void draw_text_centered(uint16_t *frame_buffer, int y, int scale, uint16_t color, const char *text);
 static void draw_wifi_indicator(uint16_t *frame_buffer);
+static void draw_volume_indicator(uint16_t *frame_buffer, uint8_t volume_percent);
 static void draw_text_block_centered(uint16_t *frame_buffer, int start_y, int scale, uint16_t color, const char *text);
 
 /**
@@ -328,6 +330,30 @@ static void draw_wifi_indicator(uint16_t *frame_buffer) {
 }
 
 /**
+ * @brief Draw a speaker icon and volume percentage in the top-left corner.
+ * @param frame_buffer Destination framebuffer.
+ * @param volume_percent Current speaker volume from 0 through 100 percent.
+ * @return This function does not return a value.
+ */
+static void draw_volume_indicator(uint16_t *frame_buffer, uint8_t volume_percent) {
+    const uint16_t color = rgb565(255, 255, 255);
+    char label[6];
+
+    fill_rect(frame_buffer, 8, 11, 5, 8, color);
+    fill_rect(frame_buffer, 13, 8, 3, 14, color);
+    fill_rect(frame_buffer, 16, 6, 2, 18, color);
+    if (volume_percent > 0) {
+        fill_rect(frame_buffer, 21, 10, 2, 10, color);
+    }
+    if (volume_percent >= 50) {
+        fill_rect(frame_buffer, 25, 7, 2, 16, color);
+    }
+
+    snprintf(label, sizeof(label), "%u%%", (unsigned) volume_percent);
+    draw_text(frame_buffer, 33, 8, 2, color, label);
+}
+
+/**
  * @brief Draw a centered multi-line text block split on newline characters.
  * @param frame_buffer Destination framebuffer.
  * @param start_y Top pixel position for the first rendered line.
@@ -393,15 +419,20 @@ static void draw_text_block_centered(uint16_t *frame_buffer, int start_y, int sc
  * @param frame_buffer Destination RGB565 framebuffer.
  * @param state Status state to render.
  * @param detail Optional detail text shown beneath the title.
+ * @param volume_percent Current speaker volume from 0 through 100 percent.
  * @return This function does not return a value.
  */
-void ui_status_render_status(uint16_t *frame_buffer, ui_status_state_t state, const char *detail) {
+void ui_status_render_status(uint16_t *frame_buffer,
+                             ui_status_state_t state,
+                             const char *detail,
+                             uint8_t volume_percent) {
     const uint16_t bg = state_bg(state);
     const uint16_t fg = rgb565(255, 255, 255);
     const char *title = state_title(state);
     const char *subtitle = state_subtitle(state);
 
     fill_rect(frame_buffer, 0, 0, UI_SCREEN_WIDTH, UI_SCREEN_HEIGHT, bg);
+    draw_volume_indicator(frame_buffer, volume_percent);
     draw_wifi_indicator(frame_buffer);
     if (title != NULL && title[0] != '\0') {
         draw_text_centered(frame_buffer, 28, UI_TITLE_SCALE, fg, title);
@@ -421,17 +452,20 @@ void ui_status_render_status(uint16_t *frame_buffer, ui_status_state_t state, co
  * @param time_text Current local time or a short sync-status message.
  * @param date_text Current local date or a short secondary status message.
  * @param location_text Weather or location label shown near the bottom of the screen.
+ * @param volume_percent Current speaker volume from 0 through 100 percent.
  * @return This function does not return a value.
  */
 void ui_status_render_clock(uint16_t *frame_buffer,
                             const char *time_text,
                             const char *date_text,
-                            const char *location_text) {
+                            const char *location_text,
+                            uint8_t volume_percent) {
     const uint16_t bg = state_bg(UI_STATUS_CLOCK);
     const uint16_t fg = rgb565(255, 255, 255);
     const uint16_t muted = rgb565(191, 219, 254);
 
     fill_rect(frame_buffer, 0, 0, UI_SCREEN_WIDTH, UI_SCREEN_HEIGHT, bg);
+    draw_volume_indicator(frame_buffer, volume_percent);
     draw_wifi_indicator(frame_buffer);
     draw_text_centered(frame_buffer, 24, UI_BODY_SCALE, muted, "LOCAL TIME");
     draw_text_centered(frame_buffer, 72, UI_TITLE_SCALE, fg, time_text != NULL ? time_text : "");

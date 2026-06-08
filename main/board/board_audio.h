@@ -8,6 +8,8 @@
 
 esp_err_t board_audio_init_microphone(esp_codec_dev_handle_t *mic_codec);
 esp_err_t board_audio_init_speaker(void);
+esp_err_t board_audio_set_volume_percent(uint8_t volume_percent);
+uint8_t board_audio_get_volume_percent(void);
 esp_err_t board_audio_begin_pcm(uint32_t sample_rate, uint8_t channels, uint8_t bits_per_sample);
 esp_err_t board_audio_write_pcm(const void *pcm_data, size_t pcm_size);
 esp_err_t board_audio_end_pcm(void);
