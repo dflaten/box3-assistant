@@ -1,6 +1,6 @@
 # User Guide
 
-This firmware runs on the ESP32-S3-BOX-3 as a local voice assistant terminal for Hue lights, weather, optional local TTS, and dynamic timers.
+This firmware runs on the ESP32-S3-BOX-3 as a local voice assistant terminal for Hue lights, weather, optional local TTS, dynamic timers, and speaker volume control.
 
 ## Wake Word And Commands
 
@@ -17,6 +17,8 @@ Always-available commands:
 - `current time in`
 - `set a timer`
 - `stop`
+- `volume up by <1-10>`
+- `volume down by <1-10>`
 
 Hue group commands are added dynamically after the firmware syncs groups from the Hue bridge:
 
@@ -104,6 +106,12 @@ The timer flow:
 6. say `stop` to stop the alarm after the timer expires
 
 Dynamic timers require a reachable local Wyoming-compatible STT service.
+
+## Volume
+
+Say `volume up by <1-10>` or `volume down by <1-10>` to adjust the speaker. Each step changes the volume by 10 percentage points, and the result is limited to 0-100%.
+
+The configured `CONFIG_TTS_PIPER_VOLUME_PERCENT` value remains the starting volume after each boot. The current percentage is shown beside a speaker icon in the top-left corner of the screen.
 
 ## Limits
 

@@ -108,6 +108,8 @@ static esp_err_t hue_command_execute(const assistant_command_context_t *context,
                                                           ASSISTANT_CMD_STOP,
                                                           ASSISTANT_CMD_TIME_NOW,
                                                           ASSISTANT_CMD_TIME_IN_LOCATION,
+                                                          ASSISTANT_CMD_VOLUME_UP_BASE,
+                                                          ASSISTANT_CMD_VOLUME_DOWN_BASE,
                                                           ASSISTANT_CMD_GROUP_BASE);
         if (out_result->err != ESP_OK) {
             hue_command_handler_format_request_error(

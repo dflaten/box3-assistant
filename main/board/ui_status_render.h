@@ -9,9 +9,13 @@
  * @param frame_buffer Destination RGB565 framebuffer.
  * @param state Status state to render.
  * @param detail Optional detail text shown beneath the title.
+ * @param volume_percent Current speaker volume from 0 through 100 percent.
  * @return This function does not return a value.
  */
-void ui_status_render_status(uint16_t *frame_buffer, ui_status_state_t state, const char *detail);
+void ui_status_render_status(uint16_t *frame_buffer,
+                             ui_status_state_t state,
+                             const char *detail,
+                             uint8_t volume_percent);
 
 /**
  * @brief Render the idle clock screen into the framebuffer.
@@ -19,9 +23,11 @@ void ui_status_render_status(uint16_t *frame_buffer, ui_status_state_t state, co
  * @param time_text Current local time or a short sync-status message.
  * @param date_text Current local date or a short secondary status message.
  * @param location_text Weather or location label shown near the bottom of the screen.
+ * @param volume_percent Current speaker volume from 0 through 100 percent.
  * @return This function does not return a value.
  */
 void ui_status_render_clock(uint16_t *frame_buffer,
                             const char *time_text,
                             const char *date_text,
-                            const char *location_text);
+                            const char *location_text,
+                            uint8_t volume_percent);

@@ -29,6 +29,18 @@ static bool test_command_dispatch_resolves_builtin_and_hue_actions(void) {
     assistant_command_resolve(ASSISTANT_CMD_TIME_IN_LOCATION, 3, &dispatch);
     ASSERT_EQ_INT(ASSISTANT_COMMAND_ACTION_TIME_IN_LOCATION, dispatch.type);
 
+    assistant_command_resolve(ASSISTANT_CMD_VOLUME_UP_BASE, 3, &dispatch);
+    ASSERT_EQ_INT(ASSISTANT_COMMAND_ACTION_VOLUME_UP, dispatch.type);
+    ASSERT_EQ_INT(1, dispatch.volume_steps);
+
+    assistant_command_resolve(ASSISTANT_CMD_VOLUME_UP_BASE + 9, 3, &dispatch);
+    ASSERT_EQ_INT(ASSISTANT_COMMAND_ACTION_VOLUME_UP, dispatch.type);
+    ASSERT_EQ_INT(10, dispatch.volume_steps);
+
+    assistant_command_resolve(ASSISTANT_CMD_VOLUME_DOWN_BASE + 4, 3, &dispatch);
+    ASSERT_EQ_INT(ASSISTANT_COMMAND_ACTION_VOLUME_DOWN, dispatch.type);
+    ASSERT_EQ_INT(5, dispatch.volume_steps);
+
     assistant_command_resolve(hue_group_command_id(ASSISTANT_CMD_GROUP_BASE, 2, false), 3, &dispatch);
     ASSERT_EQ_INT(ASSISTANT_COMMAND_ACTION_HUE_GROUP, dispatch.type);
     ASSERT_EQ_INT(2, (int) dispatch.group_index);
@@ -46,6 +58,7 @@ static bool test_command_dispatch_unknown_for_out_of_range_ids(void) {
     assistant_command_resolve(9999, 1, &dispatch);
     ASSERT_EQ_INT(ASSISTANT_COMMAND_ACTION_UNKNOWN, dispatch.type);
     ASSERT_EQ_INT(0, (int) dispatch.group_index);
+    ASSERT_EQ_INT(0, dispatch.volume_steps);
     ASSERT_TRUE(!dispatch.on);
 
     assistant_command_resolve(hue_group_command_id(ASSISTANT_CMD_GROUP_BASE, 0, true), 0, &dispatch);

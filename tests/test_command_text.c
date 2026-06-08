@@ -27,6 +27,10 @@ static bool test_command_text_labels_builtin_and_hue_commands(void) {
         strcmp(assistant_command_text(ASSISTANT_CMD_TIME_NOW, groups, 2, text, sizeof(text)), "What time is it") == 0);
     ASSERT_TRUE(strcmp(assistant_command_text(ASSISTANT_CMD_TIME_IN_LOCATION, groups, 2, text, sizeof(text)),
                        "Current time in") == 0);
+    ASSERT_TRUE(strcmp(assistant_command_text(ASSISTANT_CMD_VOLUME_UP_BASE + 2, groups, 2, text, sizeof(text)),
+                       "Volume up by 3") == 0);
+    ASSERT_TRUE(strcmp(assistant_command_text(ASSISTANT_CMD_VOLUME_DOWN_BASE + 9, groups, 2, text, sizeof(text)),
+                       "Volume down by 10") == 0);
 
     ASSERT_TRUE(strcmp(assistant_command_text(
                            hue_group_command_id(ASSISTANT_CMD_GROUP_BASE, 0, true), groups, 2, text, sizeof(text)),

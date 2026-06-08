@@ -375,6 +375,8 @@ esp_err_t assistant_session_init_models(assistant_runtime_t *rt) {
                                        ASSISTANT_CMD_STOP,
                                        ASSISTANT_CMD_TIME_NOW,
                                        ASSISTANT_CMD_TIME_IN_LOCATION,
+                                       ASSISTANT_CMD_VOLUME_UP_BASE,
+                                       ASSISTANT_CMD_VOLUME_DOWN_BASE,
                                        ASSISTANT_CMD_GROUP_BASE);
 }
 
