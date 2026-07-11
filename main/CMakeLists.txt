@@ -5,6 +5,7 @@ idf_component_register(
         "assistant/followup_audio.c"
         "assistant/presence.c"
         "assistant/session.c"
+        "assistant/timer_status.c"
         "assistant/watchdog.c"
         "commands/assistant_command_dispatch.c"
         "commands/assistant_command_text.c"

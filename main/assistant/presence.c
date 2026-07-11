@@ -1,7 +1,6 @@
 #include "assistant/presence.h"
 
 #include <stdint.h>
-#include <stdio.h>
 
 #include "driver/gpio.h"
 #include "freertos/task.h"
@@ -10,6 +9,7 @@
 #include "esp_log.h"
 
 #include "assistant/session.h"
+#include "assistant/timer_status.h"
 #include "assistant_state.h"
 #include "board/board_audio.h"
 #include "board/ui_status.h"
@@ -28,7 +28,6 @@ static const char *TAG = "assistant-presence";
 
 static void presence_clock_task(void *arg);
 static uint32_t monotonic_ms_now(void);
-static void show_timer_status(assistant_runtime_t *rt);
 
 /**
  * @brief Determine whether the most recent presence motion sample is still considered active.
@@ -47,27 +46,6 @@ bool assistant_presence_motion_recent(TickType_t last_motion_tick, TickType_t no
  */
 static uint32_t monotonic_ms_now(void) {
     return (uint32_t) pdTICKS_TO_MS(xTaskGetTickCount());
-}
-
-/**
- * @brief Render the active timer countdown or alarm state on screen.
- * @param rt Shared assistant runtime state whose timer should be shown.
- * @return This function does not return a value.
- */
-static void show_timer_status(assistant_runtime_t *rt) {
-    if (rt == NULL || !rt->timer.active) {
-        return;
-    }
-
-    char detail[24];
-    if (rt->timer.alarming) {
-        snprintf(detail, sizeof(detail), "00:00");
-        ui_status_set(UI_STATUS_TIMER_ALARM, detail);
-        return;
-    }
-
-    timer_runtime_format_remaining(&rt->timer, monotonic_ms_now(), detail, sizeof(detail));
-    ui_status_set(UI_STATUS_TIMER, detail);
 }
 
 /**
@@ -162,7 +140,7 @@ static void presence_clock_task(void *arg) {
             uint32_t remaining_seconds = timer_runtime_remaining_seconds(&rt->timer, monotonic_ms_now());
             if (!display_owned_by_presence || last_timer_alarming ||
                 remaining_seconds != last_timer_remaining_seconds) {
-                show_timer_status(rt);
+                assistant_timer_status_show(rt);
                 display_owned_by_presence = true;
             }
             last_timer_alarming = false;

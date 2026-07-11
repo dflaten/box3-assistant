@@ -28,6 +28,7 @@ cc -std=c11 -Wall -Wextra -Werror \
     "${ROOT_DIR}/tests/test_timer_runtime.c" \
     "${ROOT_DIR}/tests/test_time_format.c" \
     "${ROOT_DIR}/tests/test_time_open_meteo_parse.c" \
+    "${ROOT_DIR}/tests/test_ui_status_render.c" \
     "${ROOT_DIR}/tests/test_volume_control.c" \
     "${ROOT_DIR}/tests/test_weather_format.c" \
     "${ROOT_DIR}/main/assistant/command_registry.c" \
@@ -42,6 +43,8 @@ cc -std=c11 -Wall -Wextra -Werror \
     "${ROOT_DIR}/main/timer/timer_runtime.c" \
     "${ROOT_DIR}/main/time/time_format.c" \
     "${ROOT_DIR}/main/time/time_open_meteo_parse.c" \
+    "${ROOT_DIR}/main/board/ui_status_font.c" \
+    "${ROOT_DIR}/main/board/ui_status_render.c" \
     "${ROOT_DIR}/main/volume/volume_command_map.c" \
     "${ROOT_DIR}/main/volume/volume_control.c" \
     "${ROOT_DIR}/main/weather/weather_format.c" \
