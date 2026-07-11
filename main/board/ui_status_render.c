@@ -11,11 +11,22 @@
 #include "board/ui_status_font.h"
 #include "system/wifi_support.h"
 
-#define UI_SCREEN_WIDTH  BSP_LCD_H_RES
-#define UI_SCREEN_HEIGHT BSP_LCD_V_RES
-#define UI_TITLE_SCALE   4
-#define UI_BODY_SCALE    2
-#define UI_CHAR_SPACING  2
+#define UI_SCREEN_WIDTH      BSP_LCD_H_RES
+#define UI_SCREEN_HEIGHT     BSP_LCD_V_RES
+#define UI_TITLE_SCALE       4
+#define UI_BODY_SCALE        2
+#define UI_CHAR_SPACING      2
+#define UI_ICON_ROW_BOTTOM_Y 24
+#define UI_ICON_ROW_MARGIN_Y 16
+#define UI_CONTENT_TOP_Y     (UI_ICON_ROW_BOTTOM_Y + UI_ICON_ROW_MARGIN_Y)
+#define UI_STATUS_TITLE_Y    (UI_CONTENT_TOP_Y + 4)
+#define UI_STATUS_SUBTITLE_Y (UI_STATUS_TITLE_Y + 82)
+#define UI_STATUS_DETAIL_Y   (UI_STATUS_SUBTITLE_Y + 50)
+#define UI_DETAIL_ONLY_Y     (UI_CONTENT_TOP_Y + 48)
+#define UI_CLOCK_LABEL_Y     UI_CONTENT_TOP_Y
+#define UI_CLOCK_TIME_Y      (UI_CLOCK_LABEL_Y + 48)
+#define UI_CLOCK_DATE_Y      (UI_CLOCK_TIME_Y + 64)
+#define UI_CLOCK_LOCATION_Y  (UI_CLOCK_DATE_Y + 46)
 
 static uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b);
 static uint16_t state_bg(ui_status_state_t state);
@@ -435,13 +446,15 @@ void ui_status_render_status(uint16_t *frame_buffer,
     draw_volume_indicator(frame_buffer, volume_percent);
     draw_wifi_indicator(frame_buffer);
     if (title != NULL && title[0] != '\0') {
-        draw_text_centered(frame_buffer, 28, UI_TITLE_SCALE, fg, title);
+        draw_text_centered(frame_buffer, UI_STATUS_TITLE_Y, UI_TITLE_SCALE, fg, title);
     }
     if (subtitle != NULL && subtitle[0] != '\0') {
-        draw_text_centered(frame_buffer, 110, UI_BODY_SCALE, fg, subtitle);
+        draw_text_centered(frame_buffer, UI_STATUS_SUBTITLE_Y, UI_BODY_SCALE, fg, subtitle);
     }
     if (detail != NULL && detail[0] != '\0') {
-        const int detail_y = (title != NULL && title[0] == '\0' && subtitle != NULL && subtitle[0] == '\0') ? 72 : 160;
+        const int detail_y = (title != NULL && title[0] == '\0' && subtitle != NULL && subtitle[0] == '\0')
+                               ? UI_DETAIL_ONLY_Y
+                               : UI_STATUS_DETAIL_Y;
         draw_text_block_centered(frame_buffer, detail_y, UI_BODY_SCALE, fg, detail);
     }
 }
@@ -467,10 +480,10 @@ void ui_status_render_clock(uint16_t *frame_buffer,
     fill_rect(frame_buffer, 0, 0, UI_SCREEN_WIDTH, UI_SCREEN_HEIGHT, bg);
     draw_volume_indicator(frame_buffer, volume_percent);
     draw_wifi_indicator(frame_buffer);
-    draw_text_centered(frame_buffer, 24, UI_BODY_SCALE, muted, "LOCAL TIME");
-    draw_text_centered(frame_buffer, 72, UI_TITLE_SCALE, fg, time_text != NULL ? time_text : "");
-    draw_text_centered(frame_buffer, 136, UI_BODY_SCALE, fg, date_text != NULL ? date_text : "");
+    draw_text_centered(frame_buffer, UI_CLOCK_LABEL_Y, UI_BODY_SCALE, muted, "LOCAL TIME");
+    draw_text_centered(frame_buffer, UI_CLOCK_TIME_Y, UI_TITLE_SCALE, fg, time_text != NULL ? time_text : "");
+    draw_text_centered(frame_buffer, UI_CLOCK_DATE_Y, UI_BODY_SCALE, fg, date_text != NULL ? date_text : "");
     if (location_text != NULL && location_text[0] != '\0') {
-        draw_text_block_centered(frame_buffer, 182, UI_BODY_SCALE, muted, location_text);
+        draw_text_block_centered(frame_buffer, UI_CLOCK_LOCATION_Y, UI_BODY_SCALE, muted, location_text);
     }
 }

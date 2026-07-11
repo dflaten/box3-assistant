@@ -20,6 +20,7 @@
 
 #include "assistant/command_registry.h"
 #include "assistant/presence.h"
+#include "assistant/timer_status.h"
 #include "assistant/watchdog.h"
 #include "assistant_diagnostics.h"
 #include "assistant_state.h"
@@ -27,7 +28,6 @@
 #include "commands/assistant_commands.h"
 #include "hue/hue_command_runtime.h"
 #include "system/time_support.h"
-#include "timer/timer_runtime.h"
 
 #define COMMAND_WINDOW_MS                  10000
 #define COMMAND_MIN_LISTEN_MS              3000
@@ -43,8 +43,6 @@ static const TickType_t STATUS_HOLD_TIME = pdMS_TO_TICKS(1200);
 static const TickType_t ERROR_STATUS_HOLD_TIME = pdMS_TO_TICKS(ERROR_STATUS_HOLD_MS);
 
 static void audio_feed_set_paused(assistant_runtime_t *rt, bool paused);
-static uint32_t monotonic_ms_now(void);
-static void show_timer_status(assistant_runtime_t *rt);
 static void audio_feed_task(void *arg);
 static void speech_detect_task(void *arg);
 static void execute_command(assistant_runtime_t *rt, int command_id, const char *command_text);
@@ -65,35 +63,6 @@ const char *assistant_session_stage_name(assistant_stage_t stage) {
     default:
         return "unknown";
     }
-}
-
-/**
- * @brief Read the current monotonic uptime in milliseconds.
- * @return Milliseconds since boot truncated to 32 bits.
- */
-static uint32_t monotonic_ms_now(void) {
-    return (uint32_t) pdTICKS_TO_MS(xTaskGetTickCount());
-}
-
-/**
- * @brief Render the active timer countdown or alarm state on screen.
- * @param rt Shared assistant runtime state whose timer should be shown.
- * @return This function does not return a value.
- */
-static void show_timer_status(assistant_runtime_t *rt) {
-    if (rt == NULL || !rt->timer.active) {
-        return;
-    }
-
-    char detail[24];
-    if (rt->timer.alarming) {
-        snprintf(detail, sizeof(detail), "00:00");
-        ui_status_set(UI_STATUS_TIMER_ALARM, detail);
-        return;
-    }
-
-    timer_runtime_format_remaining(&rt->timer, monotonic_ms_now(), detail, sizeof(detail));
-    ui_status_set(UI_STATUS_TIMER, detail);
 }
 
 /**
@@ -131,7 +100,7 @@ static void audio_feed_set_paused(assistant_runtime_t *rt, bool paused) {
  */
 void assistant_session_restore_idle_ui(assistant_runtime_t *rt) {
     if (rt->timer.active) {
-        show_timer_status(rt);
+        assistant_timer_status_show(rt);
         return;
     }
 

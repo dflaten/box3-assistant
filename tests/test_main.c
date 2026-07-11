@@ -30,6 +30,8 @@ extern const test_case_t g_time_format_tests[];
 extern const int g_time_format_test_count;
 extern const test_case_t g_time_open_meteo_parse_tests[];
 extern const int g_time_open_meteo_parse_test_count;
+extern const test_case_t g_ui_status_render_tests[];
+extern const int g_ui_status_render_test_count;
 
 static int s_failures;
 static int s_tests_run;
@@ -63,6 +65,7 @@ int main(void) {
     run_test_cases(g_timer_runtime_tests, g_timer_runtime_test_count);
     run_test_cases(g_time_format_tests, g_time_format_test_count);
     run_test_cases(g_time_open_meteo_parse_tests, g_time_open_meteo_parse_test_count);
+    run_test_cases(g_ui_status_render_tests, g_ui_status_render_test_count);
     run_test_cases(g_weather_format_tests, g_weather_format_test_count);
     run_test_cases(g_volume_control_tests, g_volume_control_test_count);
 
