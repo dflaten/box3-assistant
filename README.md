@@ -2,7 +2,7 @@
 
 <p align="center">
   <img alt="Platform" src="https://img.shields.io/badge/platform-ESP32--S3--BOX--3-0f766e" />
-  <img alt="ESP-IDF Version" src="https://img.shields.io/badge/esp--idf-v5.5.3-2563eb" />
+  <img alt="ESP-IDF Version" src="https://img.shields.io/badge/esp--idf-v6.0.2-2563eb" />
   <img alt="Language" src="https://img.shields.io/badge/language-C-334155" />
   <img alt="Voice" src="https://img.shields.io/badge/voice-Hi%20ESP-f59e0b" />
   <img alt="Integrations" src="https://img.shields.io/badge/integrations-Hue%20%2B%20Weather%20%2B%20Piper%20%2B%20Timer-7c3aed" />
@@ -61,7 +61,8 @@ Current design notes:
 
 Recommended local tooling:
 
-- ESP-IDF activated through `fish` with `get_idf`
+- ESP-IDF v6.0.2
+- ESP-IDF activated through `fish` with `$HOME/.espressif/v6.0.2/esp-idf/export.fish`
 - `clang-format` for C/C++ formatting
 - `make` for common repo tasks
 

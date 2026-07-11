@@ -3,8 +3,22 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${ROOT_DIR}/tests/build"
-IDF_PATH="${IDF_PATH:-/home/david/.espressif/v5.5.3/esp-idf}"
-CJSON_DIR="${IDF_PATH}/components/json/cJSON"
+IDF_PATH="${IDF_PATH:-${HOME:-/home/david}/.espressif/v6.0.2/esp-idf}"
+
+CJSON_DIR=""
+for candidate in \
+    "${ROOT_DIR}/managed_components/espressif__cjson/cJSON" \
+    "${IDF_PATH}/components/json/cJSON"; do
+    if [[ -f "${candidate}/cJSON.h" && -f "${candidate}/cJSON.c" ]]; then
+        CJSON_DIR="${candidate}"
+        break
+    fi
+done
+
+if [[ -z "${CJSON_DIR}" ]]; then
+    echo "cJSON sources not found; run 'make build' once to fetch managed components." >&2
+    exit 1
+fi
 
 mkdir -p "${BUILD_DIR}"
 

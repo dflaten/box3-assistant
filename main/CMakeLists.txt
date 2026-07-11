@@ -47,5 +47,21 @@ idf_component_register(
         "weather/weather_format.c"
         "weather/weather_open_meteo_provider.c"
     INCLUDE_DIRS "."
-    REQUIRES espressif__esp-sr esp_http_client nvs_flash esp_netif esp_event esp_wifi esp_lcd json mbedtls espressif__esp-box-3_noglib
+    REQUIRES
+        espressif__esp-sr
+        esp_http_client
+        nvs_flash
+        esp_netif
+        esp_event
+        esp_wifi
+        esp_lcd
+        esp_driver_gpio
+        esp_timer
+        heap
+        esp_system
+        lwip
+        espressif__cjson
+        mbedtls
+        freertos
+        espressif__esp-box-3_noglib
 )

@@ -3,7 +3,6 @@ build/
 tests/build/
 sdkconfig
 sdkconfig.old
-dependencies.lock
 sdkconfig.defaults.local
 
 # Component manager downloads and generated state
