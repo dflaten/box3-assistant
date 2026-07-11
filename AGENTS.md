@@ -2,37 +2,37 @@
 
 ## ESP-IDF Environment
 
-This project expects the ESP-IDF tools to be activated from `fish`.
+This project expects ESP-IDF v6.0.2 tools to be activated from `fish`.
 
 Use this before running `idf.py` commands:
 
 ```fish
 cd /home/<user-name>/projects/esp-projects/box3-assistant
-get_idf
+source "$HOME/.espressif/v6.0.2/esp-idf/export.fish"
 ```
 
-`get_idf` is defined in the user's `fish` config and sets up the ESP-IDF environment for this shell session.
+The project `Makefile` sources this ESP-IDF export file before running firmware commands.
 
 ## Common Commands
 
 Build:
 
 ```fish
-get_idf
+source "$HOME/.espressif/v6.0.2/esp-idf/export.fish"
 idf.py build
 ```
 
 Clean rebuild:
 
 ```fish
-get_idf
+source "$HOME/.espressif/v6.0.2/esp-idf/export.fish"
 idf.py fullclean build
 ```
 
 Flash and monitor on the ESP32-S3-BOX-3:
 
 ```fish
-get_idf
+source "$HOME/.espressif/v6.0.2/esp-idf/export.fish"
 idf.py -p /dev/ttyACM0 build flash monitor
 ```
 
@@ -53,7 +53,7 @@ cmake --build build --target unit-tests
 - When working in a git worktree, sync `sdkconfig` from the main checkout before firmware builds or config edits with `make sdkconfig-from-main`, but always ask the user for confirmation before running it because it overwrites the worktree copy.
 - After the work is complete and the pull request has been published, copy the finished worktree `sdkconfig` back to the main checkout with `make sdkconfig-to-main`, but always ask the user for confirmation before running it because it overwrites the main checkout copy.
 - Never run either `sdkconfig` sync direction automatically or blindly.
-- Run `get_idf` in each new shell before using `idf.py`.
+- Source `$HOME/.espressif/v6.0.2/esp-idf/export.fish` in each new shell before using `idf.py`.
 - If `idf.py` is not found, the environment is not active yet.
 - Use the repo `.clang-format` for C/C++ formatting changes when `clang-format` is available locally.
 - This repo now uses a custom `partitions.csv`, so avoid deleting it when cleaning up build files.

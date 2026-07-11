@@ -1,7 +1,9 @@
 SHELL := /bin/bash
 
 PORT ?= /dev/ttyACM0
-FISH_RUN = fish -lc 'cd $(CURDIR); get_idf; $(1)'
+EXPECTED_IDF_VERSION ?= v6.0.2
+IDF_EXPORT ?= $(HOME)/.espressif/v6.0.2/esp-idf/export.fish
+FISH_RUN = fish -lc 'cd $(CURDIR); source $(IDF_EXPORT); set -l idf_version (idf.py --version); string match -q "*$(EXPECTED_IDF_VERSION)*" "$$idf_version"; or begin; echo "Expected ESP-IDF $(EXPECTED_IDF_VERSION), got $$idf_version" >&2; exit 1; end; $(1)'
 
 .PHONY: help format test config-local build rebuild flash monitor deploy sdkconfig-from-main sdkconfig-to-main
 

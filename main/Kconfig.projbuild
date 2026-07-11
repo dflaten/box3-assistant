@@ -15,7 +15,7 @@ config HUE_WIFI_MAXIMUM_RETRY
 
 config HUE_BRIDGE_IP
     string "Hue bridge IP address"
-    default "192.168.68.60"
+    default ""
 
 config HUE_BRIDGE_API_KEY
     string "Hue bridge API key"
