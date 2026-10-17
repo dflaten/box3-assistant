@@ -112,6 +112,7 @@ Notes:
 
 - routing requires both the local STT service and the Fireworks API to be reachable
 - the Fireworks API key is a secret and should stay in the untracked local defaults file
+- `CONFIG_FIREWORKS_BASE_URL` should be the inference API root, `https://api.fireworks.ai/inference/v1`; the firmware appends `/chat/completions` and normalizes a pasted `/completions` endpoint
 - `CONFIG_FIREWORKS_MODEL` must name a Fireworks model that supports tool calling
 - recorded audio stays on the LAN; only the transcript and the returned text are sent to Fireworks
 - when routing is disabled, the firmware keeps the local MultiNet command path

@@ -22,6 +22,55 @@ typedef struct {
     const char *enum_values[FIREWORKS_TOOL_MAX_ENUM_VALUES];
 } fireworks_tool_property_t;
 
+#define FIREWORKS_CHAT_COMPLETIONS_SUFFIX "/chat/completions"
+#define FIREWORKS_COMPLETIONS_SUFFIX      "/completions"
+
+/**
+ * @brief Check whether a string ends with a given suffix.
+ * @param text String to inspect.
+ * @param suffix Suffix to look for.
+ * @return True when text ends with suffix, otherwise false.
+ */
+static bool fireworks_request_ends_with(const char *text, const char *suffix) {
+    size_t text_len = strlen(text);
+    size_t suffix_len = strlen(suffix);
+    if (suffix_len > text_len) {
+        return false;
+    }
+
+    return strcmp(text + text_len - suffix_len, suffix) == 0;
+}
+
+/**
+ * @brief Build the chat completions endpoint URL from a configured base URL.
+ * @param base_url Configured API base URL, typically the inference API root.
+ * @param buffer Destination buffer for the assembled URL.
+ * @param buffer_size Size of the destination buffer in bytes.
+ * @return This function does not return a value.
+ */
+void fireworks_request_build_url(const char *base_url, char *buffer, size_t buffer_size) {
+    if (buffer == NULL || buffer_size == 0) {
+        return;
+    }
+
+    snprintf(buffer, buffer_size, "%s", base_url != NULL ? base_url : "");
+    size_t len = strlen(buffer);
+    while (len > 0 && buffer[len - 1] == '/') {
+        buffer[--len] = '\0';
+    }
+
+    if (fireworks_request_ends_with(buffer, FIREWORKS_CHAT_COMPLETIONS_SUFFIX)) {
+        return;
+    }
+
+    if (fireworks_request_ends_with(buffer, FIREWORKS_COMPLETIONS_SUFFIX)) {
+        len -= strlen(FIREWORKS_COMPLETIONS_SUFFIX);
+        buffer[len] = '\0';
+    }
+
+    snprintf(buffer + len, buffer_size - len, "%s", FIREWORKS_CHAT_COMPLETIONS_SUFFIX);
+}
+
 /**
  * @brief Add one required property to a tool parameter properties object.
  * @param properties Parameter properties object to extend.

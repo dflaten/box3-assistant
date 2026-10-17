@@ -12,8 +12,7 @@
 #include "net/http_trace.h"
 #include "system/wifi_support.h"
 
-#define FIREWORKS_HTTP_TRACE_BODY_SIZE  8192
-#define FIREWORKS_CHAT_COMPLETIONS_PATH "/chat/completions"
+#define FIREWORKS_HTTP_TRACE_BODY_SIZE 8192
 
 typedef http_trace_buffer_t fireworks_http_trace_t;
 
@@ -33,27 +32,6 @@ static esp_err_t fireworks_http_event_handler(esp_http_client_event_t *evt) {
     }
 
     return ESP_OK;
-}
-
-/**
- * @brief Build the chat completions URL from the configured base URL.
- * @param url Destination buffer for the assembled URL.
- * @param url_size Size of the destination buffer in bytes.
- * @return This function does not return a value.
- * @note A trailing slash on the configured base URL is trimmed before the path is appended.
- */
-static void fireworks_build_url(char *url, size_t url_size) {
-    if (url == NULL || url_size == 0) {
-        return;
-    }
-
-    snprintf(url, url_size, "%s", CONFIG_FIREWORKS_BASE_URL);
-    size_t len = strlen(url);
-    while (len > 0 && url[len - 1] == '/') {
-        url[--len] = '\0';
-    }
-
-    snprintf(url + len, url_size - len, "%s", FIREWORKS_CHAT_COMPLETIONS_PATH);
 }
 
 bool fireworks_client_is_configured(void) {
@@ -94,7 +72,7 @@ esp_err_t fireworks_client_complete(const char *system_prompt,
     trace.capacity = FIREWORKS_HTTP_TRACE_BODY_SIZE;
 
     char url[256];
-    fireworks_build_url(url, sizeof(url));
+    fireworks_request_build_url(CONFIG_FIREWORKS_BASE_URL, url, sizeof(url));
 
     char auth_header[256];
     snprintf(auth_header, sizeof(auth_header), "Bearer %s", CONFIG_FIREWORKS_API_KEY);
@@ -120,7 +98,11 @@ esp_err_t fireworks_client_complete(const char *system_prompt,
     esp_http_client_set_post_field(client, body, (int) strlen(body));
 
     s_active_client = client;
-    ESP_LOGI(TAG, "Starting Fireworks request: model=%s bytes=%u", CONFIG_FIREWORKS_MODEL, (unsigned) strlen(body));
+    ESP_LOGI(TAG,
+             "Starting Fireworks request: url=%s model=%s bytes=%u",
+             url,
+             CONFIG_FIREWORKS_MODEL,
+             (unsigned) strlen(body));
 
     esp_err_t err = esp_http_client_perform(client);
     int status = esp_http_client_get_status_code(client);
@@ -131,12 +113,12 @@ esp_err_t fireworks_client_complete(const char *system_prompt,
     free(body);
 
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Fireworks request failed: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG, "Fireworks request failed: %s body=\"%.*s\"", esp_err_to_name(err), 200, trace.body);
         free(trace.body);
         return err;
     }
     if (status < 200 || status >= 300) {
-        ESP_LOGE(TAG, "Fireworks request returned HTTP %d", status);
+        ESP_LOGE(TAG, "Fireworks request returned HTTP %d body=\"%.*s\"", status, 200, trace.body);
         free(trace.body);
         return ESP_ERR_INVALID_RESPONSE;
     }

@@ -107,11 +107,30 @@ static bool test_fireworks_request_body_without_tools(void) {
     return true;
 }
 
+static bool test_fireworks_build_url_normalizes_base(void) {
+    char url[256];
+
+    fireworks_request_build_url("https://api.fireworks.ai/inference/v1", url, sizeof(url));
+    ASSERT_TRUE(strcmp(url, "https://api.fireworks.ai/inference/v1/chat/completions") == 0);
+
+    fireworks_request_build_url("https://api.fireworks.ai/inference/v1/", url, sizeof(url));
+    ASSERT_TRUE(strcmp(url, "https://api.fireworks.ai/inference/v1/chat/completions") == 0);
+
+    fireworks_request_build_url("https://api.fireworks.ai/inference/v1/completions", url, sizeof(url));
+    ASSERT_TRUE(strcmp(url, "https://api.fireworks.ai/inference/v1/chat/completions") == 0);
+
+    fireworks_request_build_url("https://api.fireworks.ai/inference/v1/chat/completions", url, sizeof(url));
+    ASSERT_TRUE(strcmp(url, "https://api.fireworks.ai/inference/v1/chat/completions") == 0);
+
+    return true;
+}
+
 const test_case_t g_fireworks_request_tests[] = {
     {"fireworks_tools_respect_integration_flags", test_fireworks_tools_respect_integration_flags},
     {"fireworks_system_prompt_lists_groups", test_fireworks_system_prompt_lists_groups},
     {"fireworks_request_body_includes_messages_and_tools", test_fireworks_request_body_includes_messages_and_tools},
     {"fireworks_request_body_without_tools", test_fireworks_request_body_without_tools},
+    {"fireworks_build_url_normalizes_base", test_fireworks_build_url_normalizes_base},
 };
 
 const int g_fireworks_request_test_count =

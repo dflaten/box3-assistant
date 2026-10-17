@@ -33,6 +33,17 @@ void fireworks_request_build_system_prompt(const hue_group_t *groups,
                                            size_t buffer_size);
 
 /**
+ * @brief Build the chat completions endpoint URL from a configured base URL.
+ * @param base_url Configured API base URL, typically the inference API root.
+ * @param buffer Destination buffer for the assembled URL.
+ * @param buffer_size Size of the destination buffer in bytes.
+ * @return This function does not return a value.
+ * @note A trailing slash is trimmed. A base that already ends with `/chat/completions` is kept as-is, and a base
+ * ending with `/completions` has that suffix replaced, so both the API root and a pasted completions endpoint work.
+ */
+void fireworks_request_build_url(const char *base_url, char *buffer, size_t buffer_size);
+
+/**
  * @brief Build the chat completions request body sent to the Fireworks inference API.
  * @param model Model name to request.
  * @param system_prompt System instruction text.
