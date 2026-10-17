@@ -250,10 +250,11 @@ playback, so the watchdog needs:
 
 For general answers:
 
-- show the answer text on screen using the existing status text rendering
-- speak the answer through `tts_player_speak()`
-- cap the spoken answer to a few sentences so playback fits watchdog bounds
-- longer answers can remain truncated to the screen text limit
+- prompt the model to answer in at most three short sentences
+- split the answer into screen-sized pages with the host-tested `answer_pager` module
+- show each page on screen and speak that page through `tts_player_speak()`, so the page stays visible for about its spoken duration
+- page through longer answers instead of truncating them
+- keep the model token cap tight (`CONFIG_FIREWORKS_MAX_TOKENS`) so pages stay bounded
 
 ## Recommended Module Layout
 
@@ -283,6 +284,9 @@ Suggested additions:
 
 - `main/hue/hue_group_match.c` and `.h`
   - pure group name matching, host tested
+
+- `main/assistant/answer_pager.c` and `.h`
+  - pure answer pagination for the screen, host tested
 
 Responsibilities:
 
@@ -378,7 +382,7 @@ Suggested states:
   screens.
 
 - `Answer ready`
-  Show the answer text, then speak it.
+  Show the first page of the answer, then page through the rest as each page is spoken.
 
 - `STT failed`
   Local transcription request failed.
@@ -467,7 +471,7 @@ Included:
 - non-streaming Fireworks chat completion with tools
 - tool dispatch to existing handlers
 - group name matching
-- screen answer display and spoken answer playback
+- paged screen answer display and spoken answer playback
 - per-phase watchdog timeouts
 - host unit tests for all new pure modules
 

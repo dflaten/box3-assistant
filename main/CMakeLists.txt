@@ -1,5 +1,6 @@
 idf_component_register(
     SRCS
+        "assistant/answer_pager.c"
         "assistant/boot.c"
         "assistant/command_registry.c"
         "assistant/followup_audio.c"

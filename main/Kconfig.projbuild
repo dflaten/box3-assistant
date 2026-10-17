@@ -161,7 +161,7 @@ config FIREWORKS_TIMEOUT_MS
 config FIREWORKS_MAX_TOKENS
     int "Maximum response tokens requested from Fireworks"
     range 32 1024
-    default 300
+    default 200
 
 config VOICE_ROUTING_CAPTURE_MS
     int "Routed voice capture duration in ms"

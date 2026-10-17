@@ -173,8 +173,8 @@ void fireworks_request_build_system_prompt(const hue_group_t *groups,
                            buffer_size,
                            "You are the box3 voice assistant for a smart home. "
                            "Use the provided tools to control the home. "
-                           "When no tool is needed, answer the user's question directly and concisely in at most two "
-                           "sentences. Never invent device names. ");
+                           "When no tool is needed, answer the user's question directly and concisely in at most three "
+                           "short sentences. Never invent device names. ");
 
     if (written < 0 || (size_t) written >= buffer_size) {
         buffer[buffer_size - 1] = '\0';

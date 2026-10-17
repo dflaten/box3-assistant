@@ -18,6 +18,7 @@
 #include "esp_mn_models.h"
 #include "esp_wn_models.h"
 
+#include "assistant/answer_pager.h"
 #include "assistant/command_registry.h"
 #include "assistant/followup_audio.h"
 #include "assistant/presence.h"
@@ -48,6 +49,8 @@
 #define ROUTED_SAMPLE_RATE_HZ        16000
 #define ROUTED_TRANSCRIPT_LEN        192
 #define ROUTED_PAUSE_WAIT_TIMEOUT_MS 500
+#define ANSWER_PAGE_READ_MS          3500
+#define ANSWER_PAGE_GAP_MS           300
 
 #ifdef CONFIG_INTEGRATION_HUE_ENABLED
 #define ASSISTANT_HUE_TOOL_ENABLED 1
@@ -454,15 +457,40 @@ static void routed_session_run(assistant_runtime_t *rt) {
     }
 
     if (response.kind == FIREWORKS_RESPONSE_ANSWER) {
-        char answer[ASSISTANT_COMMAND_RESULT_DETAIL_LEN];
-        snprintf(answer, sizeof(answer), "%.*s", (int) (sizeof(answer) - 1), response.answer);
-        ui_status_set(UI_STATUS_SUCCESS, answer);
-        if (tts_player_is_configured()) {
-            esp_err_t tts_err = tts_player_speak(answer);
-            if (tts_err != ESP_OK) {
-                ESP_LOGW(TAG, "Answer speech playback failed: %s", esp_err_to_name(tts_err));
+        char pages[ANSWER_PAGE_MAX_COUNT][ANSWER_PAGE_LEN];
+        bool truncated = false;
+        size_t page_count = answer_pager_split(response.answer, pages, ANSWER_PAGE_MAX_COUNT, &truncated);
+        if (page_count == 0) {
+            assistant_session_show_status_then_return_to_standby(rt, UI_STATUS_ERROR, "Model failed", STATUS_HOLD_TIME);
+            return;
+        }
+        if (truncated) {
+            ESP_LOGW(TAG, "Answer exceeded %d pages and was truncated", ANSWER_PAGE_MAX_COUNT);
+        }
+
+        bool speech_configured = tts_player_is_configured();
+        for (size_t i = 0; i < page_count; ++i) {
+            ui_status_set(UI_STATUS_SUCCESS, pages[i]);
+
+            if (speech_configured) {
+                esp_err_t tts_err = tts_player_speak(pages[i]);
+                if (tts_err != ESP_OK) {
+                    ESP_LOGW(TAG, "Answer speech playback failed: %s", esp_err_to_name(tts_err));
+                    speech_configured = false;
+                    assistant_watchdog_sleep_with_heartbeat(
+                        rt, pdMS_TO_TICKS(ANSWER_PAGE_READ_MS), pdMS_TO_TICKS(ASSISTANT_HEARTBEAT_SLEEP_SLICE_MS));
+                }
+            } else {
+                assistant_watchdog_sleep_with_heartbeat(
+                    rt, pdMS_TO_TICKS(ANSWER_PAGE_READ_MS), pdMS_TO_TICKS(ASSISTANT_HEARTBEAT_SLEEP_SLICE_MS));
+            }
+
+            if (i + 1 < page_count) {
+                assistant_watchdog_sleep_with_heartbeat(
+                    rt, pdMS_TO_TICKS(ANSWER_PAGE_GAP_MS), pdMS_TO_TICKS(ASSISTANT_HEARTBEAT_SLEEP_SLICE_MS));
             }
         }
+
         assistant_watchdog_sleep_with_heartbeat(
             rt, STATUS_HOLD_TIME, pdMS_TO_TICKS(ASSISTANT_HEARTBEAT_SLEEP_SLICE_MS));
         assistant_session_restore_idle_ui(rt);

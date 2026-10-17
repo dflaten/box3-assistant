@@ -120,8 +120,10 @@ When Fireworks voice routing is enabled, the assistant does not use the fixed co
 1. say `Hi ESP`
 2. say a request in your own words, such as `turn off the living room` or `what is the definition of superfluous`
 3. wait while the device transcribes the request and asks the model
-4. the device runs the matching action, or shows and speaks a short answer
+4. the device runs the matching action, or shows and speaks a short answer, paging through it on screen if it is longer than one screen
 5. the device returns to standby
+
+Answers are kept to a few sentences and shown for about as long as they take to speak.
 
 Routing requires a reachable local STT service and Fireworks API access. The timer alarm `stop` command still works locally without either service.
 
