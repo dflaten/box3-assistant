@@ -6,6 +6,13 @@
 #include "assistant/command_handler.h"
 
 /**
+ * @brief Locate the feature handler registered for a resolved action type.
+ * @param action Resolved command action type.
+ * @return Registered handler for the action, or NULL when no handler is registered.
+ */
+const assistant_command_handler_t *assistant_command_registry_handler_for(assistant_command_action_type_t action);
+
+/**
  * @brief Resolve a command id and locate the registered feature handler for it.
  * @param command_id Recognized MultiNet command id.
  * @param group_count Number of runtime Hue groups available for dynamic group commands.

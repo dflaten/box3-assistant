@@ -16,12 +16,14 @@ typedef enum {
     ASSISTANT_COMMAND_ACTION_VOLUME_UP,
     ASSISTANT_COMMAND_ACTION_VOLUME_DOWN,
     ASSISTANT_COMMAND_ACTION_HUE_GROUP,
+    ASSISTANT_COMMAND_ACTION_SET_TIMER_DURATION,
 } assistant_command_action_type_t;
 
 typedef struct {
     assistant_command_action_type_t type;
     size_t group_index;
     uint8_t volume_steps;
+    uint32_t duration_seconds;
     bool on;
 } assistant_command_dispatch_t;
 

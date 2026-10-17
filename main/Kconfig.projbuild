@@ -125,4 +125,52 @@ config TIMER_MAX_DURATION_SECONDS
     range 1 86400
     default 86400
 
+config INTEGRATION_HUE_ENABLED
+    bool "Enable Hue voice control"
+    default y
+
+config INTEGRATION_WEATHER_ENABLED
+    bool "Enable weather voice queries"
+    default y
+
+config INTEGRATION_TIMER_ENABLED
+    bool "Enable voice timers"
+    default y
+
+config INTEGRATION_FIREWORKS_ENABLED
+    bool "Route wake-word utterances through Fireworks AI"
+    default n
+
+config FIREWORKS_BASE_URL
+    string "Fireworks inference API base URL"
+    default "https://api.fireworks.ai/inference/v1"
+
+config FIREWORKS_API_KEY
+    string "Fireworks API key"
+    default ""
+
+config FIREWORKS_MODEL
+    string "Fireworks model name"
+    default ""
+
+config FIREWORKS_TIMEOUT_MS
+    int "Fireworks request timeout in ms"
+    range 1000 60000
+    default 15000
+
+config FIREWORKS_MAX_TOKENS
+    int "Maximum response tokens requested from Fireworks"
+    range 32 1024
+    default 300
+
+config VOICE_ROUTING_CAPTURE_MS
+    int "Routed voice capture duration in ms"
+    range 1000 15000
+    default 6000
+
+config VOICE_ROUTING_SESSION_TIMEOUT_MS
+    int "Routed interaction session timeout in ms"
+    range 10000 120000
+    default 60000
+
 endmenu

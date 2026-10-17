@@ -91,3 +91,28 @@ Notes:
 - the current STT path expects 16 kHz, 16-bit, mono PCM follow-up audio
 - the first request may be slower if the server is still loading the model
 - timer parsing currently focuses on minute and second phrases
+
+## Fireworks Voice Routing
+
+Fireworks voice routing is optional and disabled by default. When enabled, every utterance after the wake word is captured, transcribed by the local STT service, and sent to a model on Fireworks AI. The model either selects a local action (Hue, timer, weather, or volume) or answers a general question.
+
+Recommended local defaults:
+
+```text
+CONFIG_INTEGRATION_FIREWORKS_ENABLED=y
+CONFIG_FIREWORKS_API_KEY="your-fireworks-api-key"
+CONFIG_FIREWORKS_BASE_URL="https://api.fireworks.ai/inference/v1"
+CONFIG_FIREWORKS_MODEL="accounts/fireworks/models/your-model"
+CONFIG_FIREWORKS_TIMEOUT_MS=15000
+CONFIG_VOICE_ROUTING_CAPTURE_MS=6000
+CONFIG_VOICE_ROUTING_SESSION_TIMEOUT_MS=60000
+```
+
+Notes:
+
+- routing requires both the local STT service and the Fireworks API to be reachable
+- the Fireworks API key is a secret and should stay in the untracked local defaults file
+- `CONFIG_FIREWORKS_MODEL` must name a Fireworks model that supports tool calling
+- recorded audio stays on the LAN; only the transcript and the returned text are sent to Fireworks
+- when routing is disabled, the firmware keeps the local MultiNet command path
+- the integration flags `CONFIG_INTEGRATION_HUE_ENABLED`, `CONFIG_INTEGRATION_WEATHER_ENABLED`, and `CONFIG_INTEGRATION_TIMER_ENABLED` control which actions are offered to the model

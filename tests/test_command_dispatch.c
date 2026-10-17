@@ -59,6 +59,7 @@ static bool test_command_dispatch_unknown_for_out_of_range_ids(void) {
     ASSERT_EQ_INT(ASSISTANT_COMMAND_ACTION_UNKNOWN, dispatch.type);
     ASSERT_EQ_INT(0, (int) dispatch.group_index);
     ASSERT_EQ_INT(0, dispatch.volume_steps);
+    ASSERT_EQ_INT(0, (int) dispatch.duration_seconds);
     ASSERT_TRUE(!dispatch.on);
 
     assistant_command_resolve(hue_group_command_id(ASSISTANT_CMD_GROUP_BASE, 0, true), 0, &dispatch);

@@ -52,7 +52,7 @@ User and setup documentation:
 
 Current design notes:
 
-- [Ask GPT Design](docs/ask-gpt-design.md)
+- [Fireworks Voice Routing Design](docs/fireworks-voice-routing-design.md)
 - [Jellyfin Option 1 Design](docs/jellyfin-option-1-design.md)
 - [Local Weather TTS Design With Piper](docs/weather-tts-piper-design.md)
 - [Timer Design With Local STT](docs/timer-stt-design.md)

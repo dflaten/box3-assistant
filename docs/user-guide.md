@@ -113,6 +113,18 @@ Say `volume up by <1-10>` or `volume down by <1-10>` to adjust the speaker. Each
 
 The configured `CONFIG_TTS_PIPER_VOLUME_PERCENT` value remains the starting volume after each boot. The current percentage is shown beside a speaker icon in the top-left corner of the screen.
 
+## Fireworks Voice Routing
+
+When Fireworks voice routing is enabled, the assistant does not use the fixed command list after the wake word. Instead it accepts a free-form request:
+
+1. say `Hi ESP`
+2. say a request in your own words, such as `turn off the living room` or `what is the definition of superfluous`
+3. wait while the device transcribes the request and asks the model
+4. the device runs the matching action, or shows and speaks a short answer
+5. the device returns to standby
+
+Routing requires a reachable local STT service and Fireworks API access. The timer alarm `stop` command still works locally without either service.
+
 ## Limits
 
 - only the first 6 usable Hue groups are added as direct voice commands

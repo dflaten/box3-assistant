@@ -42,6 +42,7 @@ void assistant_boot_prepare_runtime(assistant_runtime_t *rt, TickType_t startup_
     rt->presence_clock_heartbeat_tick = startup_tick;
     rt->last_presence_motion_tick = 0;
     rt->speech_progress_tick = startup_tick;
+    rt->session_timeout_ms = 0;
     timer_runtime_reset(&rt->timer);
 }
 

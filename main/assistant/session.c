@@ -19,15 +19,23 @@
 #include "esp_wn_models.h"
 
 #include "assistant/command_registry.h"
+#include "assistant/followup_audio.h"
 #include "assistant/presence.h"
 #include "assistant/timer_status.h"
+#include "assistant/tool_dispatch.h"
 #include "assistant/watchdog.h"
 #include "assistant_diagnostics.h"
 #include "assistant_state.h"
+#include "commands/assistant_command_dispatch.h"
 #include "commands/assistant_command_text.h"
 #include "commands/assistant_commands.h"
+#include "fireworks/fireworks_client.h"
+#include "fireworks/fireworks_request.h"
+#include "fireworks/fireworks_response_parse.h"
 #include "hue/hue_command_runtime.h"
+#include "stt/local_stt_client.h"
 #include "system/time_support.h"
+#include "tts/tts_player.h"
 
 #define COMMAND_WINDOW_MS                  10000
 #define COMMAND_MIN_LISTEN_MS              3000
@@ -36,6 +44,28 @@
 #define WEATHER_STATUS_HOLD_MS             30000
 #define ERROR_STATUS_HOLD_MS               4000
 #define PRESENCE_TIMEOUT_MS                30000
+
+#define ROUTED_SAMPLE_RATE_HZ        16000
+#define ROUTED_TRANSCRIPT_LEN        192
+#define ROUTED_PAUSE_WAIT_TIMEOUT_MS 500
+
+#ifdef CONFIG_INTEGRATION_HUE_ENABLED
+#define ASSISTANT_HUE_TOOL_ENABLED 1
+#else
+#define ASSISTANT_HUE_TOOL_ENABLED 0
+#endif
+
+#ifdef CONFIG_INTEGRATION_TIMER_ENABLED
+#define ASSISTANT_TIMER_TOOL_ENABLED 1
+#else
+#define ASSISTANT_TIMER_TOOL_ENABLED 0
+#endif
+
+#ifdef CONFIG_INTEGRATION_WEATHER_ENABLED
+#define ASSISTANT_WEATHER_TOOL_ENABLED 1
+#else
+#define ASSISTANT_WEATHER_TOOL_ENABLED 0
+#endif
 
 static const char *TAG = "assistant-session";
 static const char *WAKE_WORD = "Hi ESP";
@@ -46,6 +76,12 @@ static void audio_feed_set_paused(assistant_runtime_t *rt, bool paused);
 static void audio_feed_task(void *arg);
 static void speech_detect_task(void *arg);
 static void execute_command(assistant_runtime_t *rt, int command_id, const char *command_text);
+static void execute_dispatch(assistant_runtime_t *rt,
+                             int command_id,
+                             const assistant_command_dispatch_t *dispatch,
+                             const char *command_text);
+static bool assistant_session_should_route(void);
+static void routed_session_run(assistant_runtime_t *rt);
 
 /**
  * @brief Convert an assistant stage enum to the matching diagnostic label.
@@ -58,11 +94,27 @@ const char *assistant_session_stage_name(assistant_stage_t stage) {
         return "standby";
     case ASSISTANT_STAGE_LISTENING:
         return "listening";
+    case ASSISTANT_STAGE_CAPTURING:
+        return "capturing";
+    case ASSISTANT_STAGE_TRANSCRIBING:
+        return "transcribing";
+    case ASSISTANT_STAGE_THINKING:
+        return "thinking";
     case ASSISTANT_STAGE_EXECUTING:
         return "executing";
     default:
         return "unknown";
     }
+}
+
+/**
+ * @brief Check whether a stage blocks the speech task from publishing heartbeats.
+ * @param stage Assistant stage to inspect.
+ * @return True when the stage runs blocking work that suppresses speech-task heartbeats.
+ */
+bool assistant_session_stage_is_busy(assistant_stage_t stage) {
+    return stage == ASSISTANT_STAGE_EXECUTING || stage == ASSISTANT_STAGE_CAPTURING ||
+           stage == ASSISTANT_STAGE_TRANSCRIBING || stage == ASSISTANT_STAGE_THINKING;
 }
 
 /**
@@ -79,6 +131,7 @@ void assistant_session_clear_active(assistant_runtime_t *rt) {
     rt->assistant_awake_tick = 0;
     rt->speech_progress_tick = xTaskGetTickCount();
     rt->current_command_id = 0;
+    rt->session_timeout_ms = 0;
     rt->execution_timeout_pending = false;
     rt->execution_timeout_tick = 0;
 }
@@ -134,6 +187,7 @@ void assistant_session_return_to_standby(assistant_runtime_t *rt) {
     rt->assistant_awake_tick = 0;
     rt->speech_progress_tick = xTaskGetTickCount();
     rt->direct_command_prepared = false;
+    rt->session_timeout_ms = 0;
     audio_feed_set_paused(rt, true);
     TickType_t wait_start = xTaskGetTickCount();
     while (rt->audio_feed_busy || !rt->audio_feed_paused) {
@@ -179,13 +233,17 @@ void assistant_session_show_status_then_return_to_standby(assistant_runtime_t *r
 }
 
 /**
- * @brief Execute a resolved command through the feature handler registry.
+ * @brief Execute a resolved dispatch through the feature handler registry.
  * @param rt Shared assistant runtime state for the active command.
- * @param command_id Recognized command id to execute.
+ * @param command_id Command id used for diagnostics, or 0 for model-routed commands.
+ * @param dispatch Resolved dispatch metadata describing the action to execute.
  * @param command_text Human-readable command label for logs and fallback UI.
  * @return This function does not return a value.
  */
-static void execute_command(assistant_runtime_t *rt, int command_id, const char *command_text) {
+static void execute_dispatch(assistant_runtime_t *rt,
+                             int command_id,
+                             const assistant_command_dispatch_t *dispatch,
+                             const char *command_text) {
     audio_feed_set_paused(rt, true);
     rt->assistant_stage = ASSISTANT_STAGE_EXECUTING;
     TickType_t execute_start_tick = xTaskGetTickCount();
@@ -197,8 +255,8 @@ static void execute_command(assistant_runtime_t *rt, int command_id, const char 
     assistant_diag_start_command(command_id, rt->assistant_stage);
     ESP_LOGI(TAG, "Starting command execution for id=%d label=\"%s\"", command_id, command_text);
 
-    assistant_command_dispatch_t dispatch;
-    const assistant_command_handler_t *handler = NULL;
+    const assistant_command_handler_t *handler =
+        dispatch != NULL ? assistant_command_registry_handler_for(dispatch->type) : NULL;
     assistant_command_result_t result = {
         .err = ESP_FAIL,
         .detail = {0},
@@ -208,8 +266,7 @@ static void execute_command(assistant_runtime_t *rt, int command_id, const char 
         .timeout_label = "Command",
     };
 
-    if (!assistant_command_registry_lookup(command_id, rt->group_count, &dispatch, &handler) || handler == NULL ||
-        handler->execute == NULL) {
+    if (dispatch == NULL || handler == NULL || handler->execute == NULL) {
         ESP_LOGW(TAG, "Unhandled command id %d", command_id);
         snprintf(result.detail, sizeof(result.detail), "Command unavailable");
         result.err = ESP_ERR_NOT_SUPPORTED;
@@ -219,7 +276,7 @@ static void execute_command(assistant_runtime_t *rt, int command_id, const char 
             .command_id = command_id,
             .command_text = command_text,
         };
-        esp_err_t handler_err = handler->execute(&context, &dispatch, &result);
+        esp_err_t handler_err = handler->execute(&context, dispatch, &result);
         if (handler_err != ESP_OK && result.err == ESP_FAIL) {
             result.err = handler_err;
         }
@@ -266,6 +323,154 @@ static void execute_command(assistant_runtime_t *rt, int command_id, const char 
     assistant_watchdog_sleep_with_heartbeat(rt, result.hold_time, pdMS_TO_TICKS(ASSISTANT_HEARTBEAT_SLEEP_SLICE_MS));
     assistant_session_restore_idle_ui(rt);
     assistant_session_return_to_standby(rt);
+}
+
+/**
+ * @brief Resolve a recognized MultiNet command id and execute it.
+ * @param rt Shared assistant runtime state for the active command.
+ * @param command_id Recognized command id to execute.
+ * @param command_text Human-readable command label for logs and fallback UI.
+ * @return This function does not return a value.
+ */
+static void execute_command(assistant_runtime_t *rt, int command_id, const char *command_text) {
+    assistant_command_dispatch_t dispatch;
+    assistant_command_resolve(command_id, rt->group_count, &dispatch);
+    execute_dispatch(rt, command_id, &dispatch, command_text);
+}
+
+/**
+ * @brief Decide whether a wake word should start a model-routed interaction.
+ * @return True when Fireworks routing is compiled in, configured, and local STT is available.
+ */
+static bool assistant_session_should_route(void) {
+#ifdef CONFIG_INTEGRATION_FIREWORKS_ENABLED
+    return fireworks_client_is_configured() && local_stt_client_is_configured();
+#else
+    return false;
+#endif
+}
+
+/**
+ * @brief Dispatch a resolved model tool call to the matching feature handler.
+ * @param rt Shared assistant runtime state for the active interaction.
+ * @param response Parsed model reply containing the tool call to execute.
+ * @return This function does not return a value.
+ * @note Unmatched groups and unknown tools are spoken back and reported as an error status.
+ */
+static void routed_execute_tool(assistant_runtime_t *rt, const fireworks_response_t *response) {
+    tool_dispatch_result_t resolved = tool_dispatch_resolve(response->tool_name,
+                                                            response->tool_arguments,
+                                                            rt->groups,
+                                                            rt->group_count,
+                                                            CONFIG_TIMER_MAX_DURATION_SECONDS,
+                                                            ASSISTANT_CMD_VOLUME_STEP_COUNT);
+    if (resolved.status == TOOL_DISPATCH_OK) {
+        execute_dispatch(rt, 0, &resolved.dispatch, resolved.detail);
+        return;
+    }
+
+    char detail[ASSISTANT_COMMAND_RESULT_DETAIL_LEN];
+    if (resolved.status == TOOL_DISPATCH_UNKNOWN_GROUP) {
+        snprintf(detail, sizeof(detail), "No group named %s", resolved.detail);
+    } else {
+        snprintf(detail, sizeof(detail), "Command not understood");
+    }
+
+    if (tts_player_is_configured()) {
+        esp_err_t tts_err = tts_player_speak(detail);
+        if (tts_err != ESP_OK) {
+            ESP_LOGW(TAG, "Feedback speech playback failed: %s", esp_err_to_name(tts_err));
+        }
+    }
+    assistant_session_show_status_then_return_to_standby(rt, UI_STATUS_ERROR, detail, STATUS_HOLD_TIME);
+}
+
+/**
+ * @brief Run one model-routed interaction from wake word through answer or execution.
+ * @param rt Shared assistant runtime state for the active interaction.
+ * @return This function does not return a value.
+ * @note The assistant is already awake and the wake word engine is disabled when this runs.
+ */
+static void routed_session_run(assistant_runtime_t *rt) {
+    rt->session_timeout_ms = CONFIG_VOICE_ROUTING_SESSION_TIMEOUT_MS;
+    rt->execution_timeout_pending = false;
+    rt->execution_timeout_tick = 0;
+    rt->assistant_stage = ASSISTANT_STAGE_CAPTURING;
+    ui_status_set(UI_STATUS_LISTENING, NULL);
+
+    audio_feed_set_paused(rt, true);
+    TickType_t pause_wait_start = xTaskGetTickCount();
+    while (!rt->audio_feed_paused) {
+        if ((xTaskGetTickCount() - pause_wait_start) >= pdMS_TO_TICKS(ROUTED_PAUSE_WAIT_TIMEOUT_MS)) {
+            assistant_session_show_status_then_return_to_standby(
+                rt, UI_STATUS_ERROR, "Audio capture failed", STATUS_HOLD_TIME);
+            return;
+        }
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+
+    uint8_t *pcm = NULL;
+    size_t pcm_size = 0;
+    esp_err_t err = assistant_followup_audio_capture_mono(
+        rt, CONFIG_VOICE_ROUTING_CAPTURE_MS, ROUTED_SAMPLE_RATE_HZ, &pcm, &pcm_size);
+    if (err != ESP_OK) {
+        assistant_session_show_status_then_return_to_standby(
+            rt, UI_STATUS_ERROR, "Audio capture failed", STATUS_HOLD_TIME);
+        return;
+    }
+
+    rt->assistant_stage = ASSISTANT_STAGE_TRANSCRIBING;
+    ui_status_set(UI_STATUS_WORKING, "Transcribing");
+    char transcript[ROUTED_TRANSCRIPT_LEN];
+    err = local_stt_client_transcribe(pcm, pcm_size, ROUTED_SAMPLE_RATE_HZ, 2, 1, transcript, sizeof(transcript));
+    free(pcm);
+    if (err != ESP_OK) {
+        assistant_session_show_status_then_return_to_standby(rt, UI_STATUS_ERROR, "STT failed", STATUS_HOLD_TIME);
+        return;
+    }
+    if (transcript[0] == '\0') {
+        assistant_session_show_status_then_return_to_standby(
+            rt, UI_STATUS_ERROR, "I didn't catch that", STATUS_HOLD_TIME);
+        return;
+    }
+
+    rt->assistant_stage = ASSISTANT_STAGE_THINKING;
+    ui_status_set(UI_STATUS_WORKING, "Thinking");
+    char system_prompt[FIREWORKS_SYSTEM_PROMPT_MAX_LEN];
+    fireworks_request_build_system_prompt(rt->groups, rt->group_count, system_prompt, sizeof(system_prompt));
+    char *tools_json = fireworks_request_build_tools_json(
+        ASSISTANT_HUE_TOOL_ENABLED, ASSISTANT_TIMER_TOOL_ENABLED, ASSISTANT_WEATHER_TOOL_ENABLED, true);
+    fireworks_response_t response = {0};
+    err = fireworks_client_complete(system_prompt, transcript, tools_json, &response);
+    free(tools_json);
+    if (err != ESP_OK) {
+        assistant_session_show_status_then_return_to_standby(rt, UI_STATUS_ERROR, "Model failed", STATUS_HOLD_TIME);
+        return;
+    }
+
+    if (response.kind == FIREWORKS_RESPONSE_TOOL_CALL) {
+        routed_execute_tool(rt, &response);
+        return;
+    }
+
+    if (response.kind == FIREWORKS_RESPONSE_ANSWER) {
+        char answer[ASSISTANT_COMMAND_RESULT_DETAIL_LEN];
+        snprintf(answer, sizeof(answer), "%.*s", (int) (sizeof(answer) - 1), response.answer);
+        ui_status_set(UI_STATUS_SUCCESS, answer);
+        if (tts_player_is_configured()) {
+            esp_err_t tts_err = tts_player_speak(answer);
+            if (tts_err != ESP_OK) {
+                ESP_LOGW(TAG, "Answer speech playback failed: %s", esp_err_to_name(tts_err));
+            }
+        }
+        assistant_watchdog_sleep_with_heartbeat(
+            rt, STATUS_HOLD_TIME, pdMS_TO_TICKS(ASSISTANT_HEARTBEAT_SLEEP_SLICE_MS));
+        assistant_session_restore_idle_ui(rt);
+        assistant_session_return_to_standby(rt);
+        return;
+    }
+
+    assistant_session_show_status_then_return_to_standby(rt, UI_STATUS_ERROR, "Model failed", STATUS_HOLD_TIME);
 }
 
 /**
@@ -484,12 +689,18 @@ static void speech_detect_task(void *arg) {
                 wake_tick = xTaskGetTickCount();
                 rt->assistant_awake_tick = wake_tick;
                 rt->speech_progress_tick = wake_tick;
-                rt->assistant_stage = ASSISTANT_STAGE_LISTENING;
                 assistant_diag_capture_wake();
                 rt->multinet->clean(rt->model_data);
                 rt->afe_handle->disable_wakenet(rt->afe_data);
                 rt->direct_command_prepared = false;
                 ESP_LOGI(TAG, "Wake word detected: %s", WAKE_WORD);
+
+                if (assistant_session_should_route()) {
+                    routed_session_run(rt);
+                    continue;
+                }
+
+                rt->assistant_stage = ASSISTANT_STAGE_LISTENING;
                 esp_err_t ui_err = ui_status_try_set(UI_STATUS_LISTENING, NULL);
                 if (ui_err == ESP_ERR_TIMEOUT) {
                     ESP_LOGW(TAG, "Skipped listening UI update because the display was busy");
