@@ -39,7 +39,8 @@ static bool tool_dispatch_get_string(const cJSON *arguments, const char *key, ch
  * @param arguments Parsed tool argument object.
  * @param key Field name to read.
  * @param out_value Output receiving the parsed integer.
- * @return True when a numeric field was found, otherwise false.
+ * @return True when a numeric field within the int range was found, otherwise false.
+ * @note Values outside the 32-bit int range are rejected rather than silently clamped or truncated.
  */
 static bool tool_dispatch_get_int(const cJSON *arguments, const char *key, int *out_value) {
     if (out_value == NULL || !cJSON_IsObject(arguments)) {
@@ -51,7 +52,12 @@ static bool tool_dispatch_get_int(const cJSON *arguments, const char *key, int *
         return false;
     }
 
-    *out_value = item->valueint;
+    double value = item->valuedouble;
+    if (value < -2147483648.0 || value > 2147483647.0) {
+        return false;
+    }
+
+    *out_value = (int) value;
     return true;
 }
 

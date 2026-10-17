@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "freertos/task.h"
 
@@ -466,6 +467,11 @@ static void routed_session_run(assistant_runtime_t *rt) {
         }
         if (truncated) {
             ESP_LOGW(TAG, "Answer exceeded %d pages and was truncated", ANSWER_PAGE_MAX_COUNT);
+            size_t last_page = page_count - 1;
+            size_t last_len = strlen(pages[last_page]);
+            if (last_len + 4 < ANSWER_PAGE_LEN) {
+                memcpy(pages[last_page] + last_len, " ...", 5);
+            }
         }
 
         bool speech_configured = tts_player_is_configured();

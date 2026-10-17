@@ -11,6 +11,7 @@
 
 #include "fireworks/fireworks_cost_parse.h"
 #include "net/http_trace.h"
+#include "system/time_support.h"
 #include "system/wifi_support.h"
 
 #define FIREWORKS_COST_HTTP_TRACE_BODY_SIZE 4096
@@ -19,7 +20,7 @@
 typedef http_trace_buffer_t fireworks_cost_trace_t;
 
 static const char *TAG = "fireworks-cost";
-static esp_http_client_handle_t s_active_client;
+static volatile esp_http_client_handle_t s_active_client;
 
 /**
  * @brief Collect HTTP response body bytes for cost requests.
@@ -79,6 +80,10 @@ esp_err_t fireworks_cost_client_fetch_month_cents(uint32_t *out_cents) {
         return ESP_ERR_NOT_SUPPORTED;
     }
     if (!wifi_is_connected()) {
+        return ESP_ERR_INVALID_STATE;
+    }
+    if (!time_support_is_synced()) {
+        ESP_LOGW(TAG, "Skipping cost query until the clock is synced");
         return ESP_ERR_INVALID_STATE;
     }
 

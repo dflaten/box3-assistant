@@ -10,18 +10,28 @@
 /**
  * @brief Read a Money amount's whole units, accepting either a JSON string or number.
  * @param subtotal Parsed Money object.
- * @return Whole currency units, or zero when the field is missing.
+ * @param out_units Output receiving the whole currency units.
+ * @return True when units were read or absent, false when a present units value is malformed.
  */
-static long long fireworks_cost_read_units(const cJSON *subtotal) {
+static bool fireworks_cost_read_units(const cJSON *subtotal, long long *out_units) {
+    *out_units = 0;
+
     const cJSON *units = cJSON_GetObjectItemCaseSensitive(subtotal, "units");
     if (cJSON_IsString(units) && units->valuestring != NULL) {
-        return strtoll(units->valuestring, NULL, 10);
+        char *end = NULL;
+        long long value = strtoll(units->valuestring, &end, 10);
+        if (end == units->valuestring) {
+            return false;
+        }
+        *out_units = value;
+        return true;
     }
     if (cJSON_IsNumber(units)) {
-        return (long long) units->valuedouble;
+        *out_units = (long long) units->valuedouble;
+        return true;
     }
 
-    return 0;
+    return true;
 }
 
 /**
@@ -49,7 +59,12 @@ bool fireworks_cost_parse_subtotal_cents(const char *json, uint32_t *out_cents) 
         return false;
     }
 
-    long long units = fireworks_cost_read_units(subtotal);
+    long long units = 0;
+    if (!fireworks_cost_read_units(subtotal, &units)) {
+        cJSON_Delete(root);
+        return false;
+    }
+
     const cJSON *nanos_item = cJSON_GetObjectItemCaseSensitive(subtotal, "nanos");
     long long nanos = cJSON_IsNumber(nanos_item) ? (long long) nanos_item->valuedouble : 0;
 

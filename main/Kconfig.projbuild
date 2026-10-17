@@ -170,8 +170,8 @@ config VOICE_ROUTING_CAPTURE_MS
 
 config VOICE_ROUTING_SESSION_TIMEOUT_MS
     int "Routed interaction session timeout in ms"
-    range 10000 120000
-    default 60000
+    range 10000 180000
+    default 90000
 
 config FIREWORKS_COST_ENABLED
     bool "Show Fireworks monthly spend on the assistant screen"

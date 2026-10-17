@@ -12,6 +12,7 @@
  * @param name Group name to match, typically returned by a model tool call.
  * @param out_index Optional output receiving the matched group index.
  * @return True when a group matched, otherwise false.
- * @note Matching tries an exact case-insensitive comparison first, then a substring comparison in either direction.
+ * @note Matching prefers an exact case-insensitive match, then a whole-word match in either direction, then a
+ * substring match; ties are broken by the candidate whose length is closest to the query.
  */
 bool hue_group_match_find(const hue_group_t *groups, size_t group_count, const char *name, size_t *out_index);

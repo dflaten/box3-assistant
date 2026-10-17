@@ -27,6 +27,7 @@ static bool test_fireworks_cost_parse_rejects_missing_subtotal(void) {
     ASSERT_TRUE(!fireworks_cost_parse_subtotal_cents("not json", &cents));
     ASSERT_TRUE(!fireworks_cost_parse_subtotal_cents(NULL, &cents));
     ASSERT_TRUE(!fireworks_cost_parse_subtotal_cents("{}", NULL));
+    ASSERT_TRUE(!fireworks_cost_parse_subtotal_cents("{\"subtotal\":{\"units\":\"abc\",\"nanos\":0}}", &cents));
     return true;
 }
 

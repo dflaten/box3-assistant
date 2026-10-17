@@ -17,7 +17,7 @@
 typedef http_trace_buffer_t fireworks_http_trace_t;
 
 static const char *TAG = "fireworks";
-static esp_http_client_handle_t s_active_client;
+static volatile esp_http_client_handle_t s_active_client;
 
 /**
  * @brief Collect HTTP response body bytes for Fireworks requests.

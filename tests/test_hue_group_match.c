@@ -44,10 +44,29 @@ static bool test_hue_group_match_rejects_unknown_and_empty(void) {
     return true;
 }
 
+static bool test_hue_group_match_prefers_exact_and_closest_length(void) {
+    const hue_group_t ambiguous[] = {
+        {"1", "Home Office"},
+        {"2", "Office"},
+    };
+    size_t index = 99;
+
+    ASSERT_TRUE(hue_group_match_find(ambiguous, 2, "office", &index));
+    ASSERT_EQ_INT(1, (int) index);
+
+    ASSERT_TRUE(hue_group_match_find(ambiguous, 2, "home office", &index));
+    ASSERT_EQ_INT(0, (int) index);
+
+    ASSERT_TRUE(hue_group_match_find(ambiguous, 2, "the home office", &index));
+    ASSERT_EQ_INT(0, (int) index);
+    return true;
+}
+
 const test_case_t g_hue_group_match_tests[] = {
     {"hue_group_match_exact_and_case_insensitive", test_hue_group_match_exact_and_case_insensitive},
     {"hue_group_match_substring", test_hue_group_match_substring},
     {"hue_group_match_rejects_unknown_and_empty", test_hue_group_match_rejects_unknown_and_empty},
+    {"hue_group_match_prefers_exact_and_closest_length", test_hue_group_match_prefers_exact_and_closest_length},
 };
 
 const int g_hue_group_match_test_count = (int) (sizeof(g_hue_group_match_tests) / sizeof(g_hue_group_match_tests[0]));

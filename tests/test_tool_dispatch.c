@@ -54,6 +54,9 @@ static bool test_tool_dispatch_timer_clamps_duration(void) {
 
     result = resolve("timer_start", "{\"duration_seconds\":0}");
     ASSERT_EQ_INT(TOOL_DISPATCH_INVALID_ARGS, result.status);
+
+    result = resolve("timer_start", "{\"duration_seconds\":1e10}");
+    ASSERT_EQ_INT(TOOL_DISPATCH_INVALID_ARGS, result.status);
     return true;
 }
 
