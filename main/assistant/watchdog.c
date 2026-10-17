@@ -10,6 +10,7 @@
 #include "assistant_state.h"
 #include "board/ui_status.h"
 #include "fireworks/fireworks_client.h"
+#include "fireworks/fireworks_cost_client.h"
 #include "net/request_cancel.h"
 #include "hue/hue_client.h"
 #include "stt/local_stt_client.h"
@@ -70,6 +71,7 @@ static void assistant_session_timeout_task(void *arg) {
         time_client_cancel_active_request,
         tts_player_cancel,
         fireworks_client_cancel_active_request,
+        fireworks_cost_client_cancel_active_request,
     };
 
     while (true) {

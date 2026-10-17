@@ -36,6 +36,7 @@ cc -std=c11 -Wall -Wextra -Werror \
     "${ROOT_DIR}/tests/test_command_dispatch.c" \
     "${ROOT_DIR}/tests/test_command_registry.c" \
     "${ROOT_DIR}/tests/test_command_text.c" \
+    "${ROOT_DIR}/tests/test_fireworks_cost_parse.c" \
     "${ROOT_DIR}/tests/test_fireworks_request.c" \
     "${ROOT_DIR}/tests/test_fireworks_response_parse.c" \
     "${ROOT_DIR}/tests/test_hue_discovery_response.c" \
@@ -57,6 +58,7 @@ cc -std=c11 -Wall -Wextra -Werror \
     "${ROOT_DIR}/main/commands/assistant_command_dispatch.c" \
     "${ROOT_DIR}/main/commands/assistant_command_text.c" \
     "${ROOT_DIR}/main/assistant_state.c" \
+    "${ROOT_DIR}/main/fireworks/fireworks_cost_parse.c" \
     "${ROOT_DIR}/main/fireworks/fireworks_request.c" \
     "${ROOT_DIR}/main/fireworks/fireworks_response_parse.c" \
     "${ROOT_DIR}/main/hue/hue_command_map.c" \

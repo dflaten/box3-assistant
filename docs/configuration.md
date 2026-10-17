@@ -117,3 +117,21 @@ Notes:
 - recorded audio stays on the LAN; only the transcript and the returned text are sent to Fireworks
 - when routing is disabled, the firmware keeps the local MultiNet command path
 - the integration flags `CONFIG_INTEGRATION_HUE_ENABLED`, `CONFIG_INTEGRATION_WEATHER_ENABLED`, and `CONFIG_INTEGRATION_TIMER_ENABLED` control which actions are offered to the model
+
+### Monthly Spend Indicator
+
+The firmware can show the current month's rated spend for one Fireworks API key in the bottom-right corner of the screen. It refreshes about once an hour.
+
+```text
+CONFIG_FIREWORKS_COST_ENABLED=y
+CONFIG_FIREWORKS_ACCOUNT_ID="your-account-id"
+CONFIG_FIREWORKS_COST_KEY_ID="key_xxxxxxxxxxx"
+CONFIG_FIREWORKS_COST_REFRESH_SECONDS=3600
+```
+
+Notes:
+
+- the cost endpoint (`POST /v1/accounts/{account_id}/usageCosts:query`) authenticates with the same API key used for inference
+- the endpoint filters by the stable API key ID, not the human-readable key name; use the Fireworks billing API to find both the account ID and the key ID
+- the value shown is the rated subtotal for the configured key over the current UTC month
+- Fireworks aggregates costs daily and can lag live traffic, so an hourly refresh may not change every hour

@@ -12,6 +12,8 @@ extern const test_case_t g_command_registry_tests[];
 extern const int g_command_registry_test_count;
 extern const test_case_t g_command_text_tests[];
 extern const int g_command_text_test_count;
+extern const test_case_t g_fireworks_cost_parse_tests[];
+extern const int g_fireworks_cost_parse_test_count;
 extern const test_case_t g_fireworks_request_tests[];
 extern const int g_fireworks_request_test_count;
 extern const test_case_t g_fireworks_response_parse_tests[];
@@ -68,6 +70,7 @@ int main(void) {
     run_test_cases(g_command_dispatch_tests, g_command_dispatch_test_count);
     run_test_cases(g_command_registry_tests, g_command_registry_test_count);
     run_test_cases(g_command_text_tests, g_command_text_test_count);
+    run_test_cases(g_fireworks_cost_parse_tests, g_fireworks_cost_parse_test_count);
     run_test_cases(g_fireworks_request_tests, g_fireworks_request_test_count);
     run_test_cases(g_fireworks_response_parse_tests, g_fireworks_response_parse_test_count);
     run_test_cases(g_hue_discovery_response_tests, g_hue_discovery_response_test_count);

@@ -173,4 +173,25 @@ config VOICE_ROUTING_SESSION_TIMEOUT_MS
     range 10000 120000
     default 60000
 
+config FIREWORKS_COST_ENABLED
+    bool "Show Fireworks monthly spend on the assistant screen"
+    default n
+
+config FIREWORKS_COST_BASE_URL
+    string "Fireworks account API base URL"
+    default "https://api.fireworks.ai/v1"
+
+config FIREWORKS_ACCOUNT_ID
+    string "Fireworks account ID"
+    default ""
+
+config FIREWORKS_COST_KEY_ID
+    string "Fireworks API key ID to report cost for"
+    default ""
+
+config FIREWORKS_COST_REFRESH_SECONDS
+    int "Fireworks cost refresh interval in seconds"
+    range 60 86400
+    default 3600
+
 endmenu

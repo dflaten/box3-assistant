@@ -127,6 +127,10 @@ Answers are kept to a few sentences and shown for about as long as they take to 
 
 Routing requires a reachable local STT service and Fireworks API access. The timer alarm `stop` command still works locally without either service.
 
+## Monthly Spend
+
+When enabled, the assistant shows the current month's Fireworks spend for its own API key in the bottom-right corner of the screen. The value refreshes about once an hour and is shown on the status and clock screens.
+
 ## Limits
 
 - only the first 6 usable Hue groups are added as direct voice commands

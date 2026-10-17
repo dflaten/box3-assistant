@@ -14,6 +14,7 @@
 #include "board/board_audio.h"
 #include "board/ui_status.h"
 #include "commands/assistant_commands.h"
+#include "fireworks/fireworks_cost_service.h"
 #include "hue/hue_client.h"
 #include "hue/hue_command_handler.h"
 #include "hue/hue_command_runtime.h"
@@ -141,4 +142,5 @@ void assistant_boot_start(void) {
     assistant_session_start_tasks(rt);
     assistant_watchdog_start_task(rt);
     assistant_presence_start_task(rt);
+    fireworks_cost_service_start();
 }
