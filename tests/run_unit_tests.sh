@@ -28,13 +28,19 @@ cc -std=c11 -Wall -Wextra -Werror \
     -I"${ROOT_DIR}/main/commands" \
     -I"${ROOT_DIR}/main/weather" \
     -I"${ROOT_DIR}/main/hue" \
+    -I"${ROOT_DIR}/main/fireworks" \
     -I"${CJSON_DIR}" \
     "${ROOT_DIR}/tests/test_main.c" \
+    "${ROOT_DIR}/tests/test_answer_pager.c" \
     "${ROOT_DIR}/tests/test_assistant_state.c" \
     "${ROOT_DIR}/tests/test_command_dispatch.c" \
     "${ROOT_DIR}/tests/test_command_registry.c" \
     "${ROOT_DIR}/tests/test_command_text.c" \
+    "${ROOT_DIR}/tests/test_fireworks_cost_parse.c" \
+    "${ROOT_DIR}/tests/test_fireworks_request.c" \
+    "${ROOT_DIR}/tests/test_fireworks_response_parse.c" \
     "${ROOT_DIR}/tests/test_hue_discovery_response.c" \
+    "${ROOT_DIR}/tests/test_hue_group_match.c" \
     "${ROOT_DIR}/tests/test_http_trace.c" \
     "${ROOT_DIR}/tests/test_local_stt_protocol.c" \
     "${ROOT_DIR}/tests/test_request_cancel.c" \
@@ -42,15 +48,22 @@ cc -std=c11 -Wall -Wextra -Werror \
     "${ROOT_DIR}/tests/test_timer_runtime.c" \
     "${ROOT_DIR}/tests/test_time_format.c" \
     "${ROOT_DIR}/tests/test_time_open_meteo_parse.c" \
+    "${ROOT_DIR}/tests/test_tool_dispatch.c" \
     "${ROOT_DIR}/tests/test_ui_status_render.c" \
     "${ROOT_DIR}/tests/test_volume_control.c" \
     "${ROOT_DIR}/tests/test_weather_format.c" \
+    "${ROOT_DIR}/main/assistant/answer_pager.c" \
     "${ROOT_DIR}/main/assistant/command_registry.c" \
+    "${ROOT_DIR}/main/assistant/tool_dispatch.c" \
     "${ROOT_DIR}/main/commands/assistant_command_dispatch.c" \
     "${ROOT_DIR}/main/commands/assistant_command_text.c" \
     "${ROOT_DIR}/main/assistant_state.c" \
+    "${ROOT_DIR}/main/fireworks/fireworks_cost_parse.c" \
+    "${ROOT_DIR}/main/fireworks/fireworks_request.c" \
+    "${ROOT_DIR}/main/fireworks/fireworks_response_parse.c" \
     "${ROOT_DIR}/main/hue/hue_command_map.c" \
     "${ROOT_DIR}/main/hue/hue_discovery_response.c" \
+    "${ROOT_DIR}/main/hue/hue_group_match.c" \
     "${ROOT_DIR}/main/net/http_trace.c" \
     "${ROOT_DIR}/main/stt/local_stt_protocol.c" \
     "${ROOT_DIR}/main/timer/timer_parse.c" \

@@ -18,6 +18,7 @@
 #define UI_MUTEX_TIMEOUT_MS   2000
 #define UI_IDLE_TASK_STACK    4096
 #define UI_IDLE_TASK_PRIORITY 2
+#define UI_COST_TEXT_LEN      16
 
 static const char *TAG = "ui-status";
 
@@ -31,6 +32,7 @@ static uint16_t *s_frame_buffer;
 static SemaphoreHandle_t s_ui_mutex;
 static volatile TickType_t s_ui_render_start_tick;
 static volatile bool s_ui_render_in_progress;
+static char s_cost_text[UI_COST_TEXT_LEN];
 
 static void ui_idle_task(void *arg);
 static void ui_status_note_activity(void);
@@ -113,6 +115,33 @@ static void ui_idle_task(void *arg) {
 }
 
 /**
+ * @brief Store the text shown in the bottom-right cost indicator.
+ * @param text Cost text such as "$1.85", or NULL/empty to hide the indicator.
+ * @return This function does not return a value.
+ * @note The value is applied on the next status or clock render; no immediate redraw is forced.
+ */
+void ui_status_set_cost_text(const char *text) {
+    if (s_ui_mutex != NULL && xSemaphoreTake(s_ui_mutex, pdMS_TO_TICKS(UI_MUTEX_TIMEOUT_MS)) != pdTRUE) {
+        ESP_LOGW(TAG, "Timed out waiting for UI mutex in ui_status_set_cost_text");
+        return;
+    }
+
+    if (text == NULL) {
+        s_cost_text[0] = '\0';
+    } else {
+        size_t i = 0;
+        for (; i + 1 < sizeof(s_cost_text) && text[i] != '\0'; ++i) {
+            s_cost_text[i] = text[i];
+        }
+        s_cost_text[i] = '\0';
+    }
+
+    if (s_ui_mutex != NULL) {
+        xSemaphoreGive(s_ui_mutex);
+    }
+}
+
+/**
  * @brief Update the screen to a new UI status state and optional detail text.
  * @param state The new status state to display.
  * @param detail Optional detail text shown on the screen.
@@ -134,7 +163,7 @@ void ui_status_set(ui_status_state_t state, const char *detail) {
     esp_err_t power_err = ui_status_display_power_set(s_panel, s_ready, &s_display_on, true);
     esp_err_t flush_err = ESP_OK;
     if (power_err == ESP_OK) {
-        ui_status_render_status(s_frame_buffer, state, detail, board_audio_get_volume_percent());
+        ui_status_render_status(s_frame_buffer, state, detail, board_audio_get_volume_percent(), s_cost_text);
         flush_err = ui_status_display_flush(s_panel, s_frame_buffer);
     }
     ui_render_end();
@@ -169,7 +198,7 @@ esp_err_t ui_status_try_set(ui_status_state_t state, const char *detail) {
     esp_err_t power_err = ui_status_display_power_set(s_panel, s_ready, &s_display_on, true);
     esp_err_t flush_err = ESP_OK;
     if (power_err == ESP_OK) {
-        ui_status_render_status(s_frame_buffer, state, detail, board_audio_get_volume_percent());
+        ui_status_render_status(s_frame_buffer, state, detail, board_audio_get_volume_percent(), s_cost_text);
         flush_err = ui_status_display_flush(s_panel, s_frame_buffer);
     }
     ui_render_end();
@@ -209,7 +238,8 @@ void ui_status_show_clock(const char *time_text, const char *date_text, const ch
     esp_err_t power_err = ui_status_display_power_set(s_panel, s_ready, &s_display_on, true);
     esp_err_t flush_err = ESP_OK;
     if (power_err == ESP_OK) {
-        ui_status_render_clock(s_frame_buffer, time_text, date_text, location_text, board_audio_get_volume_percent());
+        ui_status_render_clock(
+            s_frame_buffer, time_text, date_text, location_text, board_audio_get_volume_percent(), s_cost_text);
         flush_err = ui_status_display_flush(s_panel, s_frame_buffer);
     }
     ui_render_end();

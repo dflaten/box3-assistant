@@ -83,6 +83,8 @@ static bool test_command_registry_routes_builtin_actions_to_feature_handlers(voi
     ASSERT_TRUE(assistant_command_registry_lookup(ASSISTANT_CMD_STOP, 2, &dispatch, &handler));
     ASSERT_EQ_INT(ASSISTANT_COMMAND_ACTION_STOP, dispatch.type);
     ASSERT_TRUE(handler == &s_timer_handler);
+    ASSERT_TRUE(assistant_command_registry_handler_for(ASSISTANT_COMMAND_ACTION_SET_TIMER_DURATION) ==
+                &s_timer_handler);
     return true;
 }
 

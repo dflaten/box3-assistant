@@ -27,6 +27,11 @@
 #define UI_CLOCK_TIME_Y      (UI_CLOCK_LABEL_Y + 48)
 #define UI_CLOCK_DATE_Y      (UI_CLOCK_TIME_Y + 64)
 #define UI_CLOCK_LOCATION_Y  (UI_CLOCK_DATE_Y + 46)
+#define UI_BODY_LINE_HEIGHT  ((7 * UI_BODY_SCALE) + (UI_BODY_SCALE * 2))
+#define UI_COST_STRIP_HEIGHT 22
+#define UI_COST_STRIP_TOP    (UI_SCREEN_HEIGHT - UI_COST_STRIP_HEIGHT)
+#define UI_COST_TEXT_Y       (UI_SCREEN_HEIGHT - 18)
+#define UI_COST_RIGHT_MARGIN 4
 
 static uint16_t rgb565(uint8_t r, uint8_t g, uint8_t b);
 static uint16_t state_bg(ui_status_state_t state);
@@ -41,7 +46,9 @@ static int max_chars_per_line(int scale);
 static void draw_text_centered(uint16_t *frame_buffer, int y, int scale, uint16_t color, const char *text);
 static void draw_wifi_indicator(uint16_t *frame_buffer);
 static void draw_volume_indicator(uint16_t *frame_buffer, uint8_t volume_percent);
-static void draw_text_block_centered(uint16_t *frame_buffer, int start_y, int scale, uint16_t color, const char *text);
+static void draw_text_block_centered(
+    uint16_t *frame_buffer, int start_y, int scale, uint16_t color, const char *text, int max_lines);
+static void draw_cost_indicator(uint16_t *frame_buffer, const char *cost_text, uint16_t bg);
 
 /**
  * @brief Convert 8-bit RGB components into RGB565 panel color format.
@@ -371,9 +378,11 @@ static void draw_volume_indicator(uint16_t *frame_buffer, uint8_t volume_percent
  * @param scale Pixel scale factor for the built-in font.
  * @param color RGB565 text color.
  * @param text Multi-line text block to render.
+ * @param max_lines Maximum number of lines to draw, or zero for no limit.
  * @return This function does not return a value.
  */
-static void draw_text_block_centered(uint16_t *frame_buffer, int start_y, int scale, uint16_t color, const char *text) {
+static void draw_text_block_centered(
+    uint16_t *frame_buffer, int start_y, int scale, uint16_t color, const char *text, int max_lines) {
     if (text == NULL || text[0] == '\0') {
         return;
     }
@@ -412,6 +421,10 @@ static void draw_text_block_centered(uint16_t *frame_buffer, int start_y, int sc
         draw_text_centered(frame_buffer, start_y + (line_index * line_height), scale, color, line);
         line_index++;
 
+        if (max_lines > 0 && line_index >= max_lines) {
+            break;
+        }
+
         cursor = segment_end;
         while (*cursor == ' ') {
             cursor++;
@@ -426,17 +439,42 @@ static void draw_text_block_centered(uint16_t *frame_buffer, int start_y, int sc
 }
 
 /**
+ * @brief Draw the bottom-right cost indicator, or nothing when no cost is known.
+ * @param frame_buffer Destination framebuffer.
+ * @param cost_text Cost text to render, or NULL/empty to skip.
+ * @param bg Background color used to clear the indicator area.
+ * @return This function does not return a value.
+ */
+static void draw_cost_indicator(uint16_t *frame_buffer, const char *cost_text, uint16_t bg) {
+    if (cost_text == NULL || cost_text[0] == '\0') {
+        return;
+    }
+
+    const uint16_t color = rgb565(255, 255, 255);
+    const int width = text_width(cost_text, UI_BODY_SCALE);
+    int x = UI_SCREEN_WIDTH - width - UI_COST_RIGHT_MARGIN;
+    if (x < 0) {
+        x = 0;
+    }
+
+    fill_rect(frame_buffer, x - 2, UI_COST_TEXT_Y - 2, width + 4, 18, bg);
+    draw_text(frame_buffer, x, UI_COST_TEXT_Y, UI_BODY_SCALE, color, cost_text);
+}
+
+/**
  * @brief Render a full assistant status screen into the framebuffer.
  * @param frame_buffer Destination RGB565 framebuffer.
  * @param state Status state to render.
  * @param detail Optional detail text shown beneath the title.
  * @param volume_percent Current speaker volume from 0 through 100 percent.
+ * @param cost_text Optional bottom-right cost text, or NULL to hide it.
  * @return This function does not return a value.
  */
 void ui_status_render_status(uint16_t *frame_buffer,
                              ui_status_state_t state,
                              const char *detail,
-                             uint8_t volume_percent) {
+                             uint8_t volume_percent,
+                             const char *cost_text) {
     const uint16_t bg = state_bg(state);
     const uint16_t fg = rgb565(255, 255, 255);
     const char *title = state_title(state);
@@ -455,8 +493,11 @@ void ui_status_render_status(uint16_t *frame_buffer,
         const int detail_y = (title != NULL && title[0] == '\0' && subtitle != NULL && subtitle[0] == '\0')
                                ? UI_DETAIL_ONLY_Y
                                : UI_STATUS_DETAIL_Y;
-        draw_text_block_centered(frame_buffer, detail_y, UI_BODY_SCALE, fg, detail);
+        const int bottom = (cost_text != NULL && cost_text[0] != '\0') ? UI_COST_STRIP_TOP : UI_SCREEN_HEIGHT;
+        const int max_lines = (bottom - detail_y) / UI_BODY_LINE_HEIGHT;
+        draw_text_block_centered(frame_buffer, detail_y, UI_BODY_SCALE, fg, detail, max_lines);
     }
+    draw_cost_indicator(frame_buffer, cost_text, bg);
 }
 
 /**
@@ -466,13 +507,15 @@ void ui_status_render_status(uint16_t *frame_buffer,
  * @param date_text Current local date or a short secondary status message.
  * @param location_text Weather or location label shown near the bottom of the screen.
  * @param volume_percent Current speaker volume from 0 through 100 percent.
+ * @param cost_text Optional bottom-right cost text, or NULL to hide it.
  * @return This function does not return a value.
  */
 void ui_status_render_clock(uint16_t *frame_buffer,
                             const char *time_text,
                             const char *date_text,
                             const char *location_text,
-                            uint8_t volume_percent) {
+                            uint8_t volume_percent,
+                            const char *cost_text) {
     const uint16_t bg = state_bg(UI_STATUS_CLOCK);
     const uint16_t fg = rgb565(255, 255, 255);
     const uint16_t muted = rgb565(191, 219, 254);
@@ -484,6 +527,9 @@ void ui_status_render_clock(uint16_t *frame_buffer,
     draw_text_centered(frame_buffer, UI_CLOCK_TIME_Y, UI_TITLE_SCALE, fg, time_text != NULL ? time_text : "");
     draw_text_centered(frame_buffer, UI_CLOCK_DATE_Y, UI_BODY_SCALE, fg, date_text != NULL ? date_text : "");
     if (location_text != NULL && location_text[0] != '\0') {
-        draw_text_block_centered(frame_buffer, UI_CLOCK_LOCATION_Y, UI_BODY_SCALE, muted, location_text);
+        const int bottom = (cost_text != NULL && cost_text[0] != '\0') ? UI_COST_STRIP_TOP : UI_SCREEN_HEIGHT;
+        const int max_lines = (bottom - UI_CLOCK_LOCATION_Y) / UI_BODY_LINE_HEIGHT;
+        draw_text_block_centered(frame_buffer, UI_CLOCK_LOCATION_Y, UI_BODY_SCALE, muted, location_text, max_lines);
     }
+    draw_cost_indicator(frame_buffer, cost_text, bg);
 }

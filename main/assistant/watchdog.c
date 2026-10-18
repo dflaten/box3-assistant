@@ -9,6 +9,8 @@
 #include "assistant_diagnostics.h"
 #include "assistant_state.h"
 #include "board/ui_status.h"
+#include "fireworks/fireworks_client.h"
+#include "fireworks/fireworks_cost_client.h"
 #include "net/request_cancel.h"
 #include "hue/hue_client.h"
 #include "stt/local_stt_client.h"
@@ -68,6 +70,8 @@ static void assistant_session_timeout_task(void *arg) {
         local_stt_client_cancel_active_request,
         time_client_cancel_active_request,
         tts_player_cancel,
+        fireworks_client_cancel_active_request,
+        fireworks_cost_client_cancel_active_request,
     };
 
     while (true) {
@@ -84,7 +88,7 @@ static void assistant_session_timeout_task(void *arg) {
             ESP_LOGE(TAG, "Audio feed task heartbeat stalled for %lu ms; restarting", (unsigned long) audio_stalled_ms);
             esp_restart();
         }
-        if (rt->assistant_stage != ASSISTANT_STAGE_EXECUTING &&
+        if (!assistant_session_stage_is_busy(rt->assistant_stage) &&
             assistant_task_timed_out(
                 rt->speech_detect_heartbeat_tick != 0, speech_detect_stalled_ms, ASSISTANT_TASK_HEARTBEAT_TIMEOUT_MS)) {
             ESP_LOGE(TAG,
@@ -121,9 +125,11 @@ static void assistant_session_timeout_task(void *arg) {
             esp_restart();
         }
 
+        uint32_t session_timeout_ms =
+            rt->session_timeout_ms != 0 ? rt->session_timeout_ms : ASSISTANT_SESSION_TIMEOUT_MS;
         if (assistant_session_timed_out(
-                rt->assistant_awake, rt->assistant_awake_tick != 0, elapsed_ms, ASSISTANT_SESSION_TIMEOUT_MS)) {
-            if (rt->assistant_stage == ASSISTANT_STAGE_EXECUTING) {
+                rt->assistant_awake, rt->assistant_awake_tick != 0, elapsed_ms, session_timeout_ms)) {
+            if (assistant_session_stage_is_busy(rt->assistant_stage)) {
                 if (!rt->execution_timeout_pending) {
                     rt->execution_timeout_pending = true;
                     rt->execution_timeout_tick = now;
@@ -132,8 +138,8 @@ static void assistant_session_timeout_task(void *arg) {
                     esp_err_t cancel_err =
                         request_cancel_first_active(cancel_fns, sizeof(cancel_fns) / sizeof(cancel_fns[0]));
                     ESP_LOGE(TAG,
-                             "Assistant execution exceeded %d ms for command_id=%d; cancel result=%s",
-                             ASSISTANT_SESSION_TIMEOUT_MS,
+                             "Assistant execution exceeded %lu ms for command_id=%d; cancel result=%s",
+                             (unsigned long) session_timeout_ms,
                              rt->current_command_id,
                              esp_err_to_name(cancel_err));
                     continue;
@@ -148,8 +154,8 @@ static void assistant_session_timeout_task(void *arg) {
                          ASSISTANT_EXECUTION_CANCEL_GRACE_MS);
             }
             ESP_LOGE(TAG,
-                     "Assistant session exceeded %d ms in %s; restarting",
-                     ASSISTANT_SESSION_TIMEOUT_MS,
+                     "Assistant session exceeded %lu ms in %s; restarting",
+                     (unsigned long) session_timeout_ms,
                      assistant_session_stage_name(rt->assistant_stage));
             esp_restart();
         }

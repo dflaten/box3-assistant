@@ -15,6 +15,13 @@
 const char *assistant_session_stage_name(assistant_stage_t stage);
 
 /**
+ * @brief Check whether a stage blocks the speech task from publishing heartbeats.
+ * @param stage Assistant stage to inspect.
+ * @return True when the stage runs blocking work that suppresses speech-task heartbeats.
+ */
+bool assistant_session_stage_is_busy(assistant_stage_t stage);
+
+/**
  * @brief Clear the active wake/listen/execute session bookkeeping.
  * @param rt Runtime state whose watchdog-visible session fields should be reset.
  * @return This function does not return a value.

@@ -19,6 +19,7 @@ void assistant_command_resolve(int command_id, size_t group_count, assistant_com
         .type = ASSISTANT_COMMAND_ACTION_UNKNOWN,
         .group_index = 0,
         .volume_steps = 0,
+        .duration_seconds = 0,
         .on = false,
     };
 

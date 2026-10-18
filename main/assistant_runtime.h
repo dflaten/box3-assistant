@@ -17,6 +17,9 @@
 typedef enum {
     ASSISTANT_STAGE_STANDBY = 0,
     ASSISTANT_STAGE_LISTENING,
+    ASSISTANT_STAGE_CAPTURING,
+    ASSISTANT_STAGE_TRANSCRIBING,
+    ASSISTANT_STAGE_THINKING,
     ASSISTANT_STAGE_EXECUTING,
 } assistant_stage_t;
 
@@ -52,6 +55,8 @@ typedef struct {
     volatile assistant_stage_t assistant_stage;
     /** Most recent command id being executed, or 0 when idle. */
     volatile int current_command_id;
+    /** Session timeout budget in milliseconds, or 0 to use the default watchdog timeout. */
+    volatile uint32_t session_timeout_ms;
     /** True after the watchdog has requested timeout recovery for the active execution. */
     volatile bool execution_timeout_pending;
     /** Tick count captured when timeout recovery was first requested. */

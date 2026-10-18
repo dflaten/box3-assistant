@@ -91,3 +91,47 @@ Notes:
 - the current STT path expects 16 kHz, 16-bit, mono PCM follow-up audio
 - the first request may be slower if the server is still loading the model
 - timer parsing currently focuses on minute and second phrases
+
+## Fireworks Voice Routing
+
+Fireworks voice routing is optional and disabled by default. When enabled, every utterance after the wake word is captured, transcribed by the local STT service, and sent to a model on Fireworks AI. The model either selects a local action (Hue, timer, weather, or volume) or answers a general question.
+
+Recommended local defaults:
+
+```text
+CONFIG_INTEGRATION_FIREWORKS_ENABLED=y
+CONFIG_FIREWORKS_API_KEY="your-fireworks-api-key"
+CONFIG_FIREWORKS_BASE_URL="https://api.fireworks.ai/inference/v1"
+CONFIG_FIREWORKS_MODEL="accounts/fireworks/models/your-model"
+CONFIG_FIREWORKS_TIMEOUT_MS=15000
+CONFIG_VOICE_ROUTING_CAPTURE_MS=6000
+CONFIG_VOICE_ROUTING_SESSION_TIMEOUT_MS=60000
+```
+
+Notes:
+
+- routing requires both the local STT service and the Fireworks API to be reachable
+- the Fireworks API key is a secret and should stay in the untracked local defaults file
+- `CONFIG_FIREWORKS_BASE_URL` should be the inference API root, `https://api.fireworks.ai/inference/v1`; the firmware appends `/chat/completions` and normalizes a pasted `/completions` endpoint
+- `CONFIG_FIREWORKS_MODEL` must name a Fireworks model that supports tool calling
+- recorded audio stays on the LAN; only the transcript and the returned text are sent to Fireworks
+- when routing is disabled, the firmware keeps the local MultiNet command path
+- the integration flags `CONFIG_INTEGRATION_HUE_ENABLED`, `CONFIG_INTEGRATION_WEATHER_ENABLED`, and `CONFIG_INTEGRATION_TIMER_ENABLED` control which actions are offered to the model
+
+### Monthly Spend Indicator
+
+The firmware can show the current month's rated spend for one Fireworks API key in the bottom-right corner of the screen. It refreshes about once an hour.
+
+```text
+CONFIG_FIREWORKS_COST_ENABLED=y
+CONFIG_FIREWORKS_ACCOUNT_ID="your-account-id"
+CONFIG_FIREWORKS_COST_KEY_ID="key_xxxxxxxxxxx"
+CONFIG_FIREWORKS_COST_REFRESH_SECONDS=3600
+```
+
+Notes:
+
+- the cost endpoint (`POST /v1/accounts/{account_id}/usageCosts:query`) authenticates with the same API key used for inference
+- the endpoint filters by the stable API key ID, not the human-readable key name; use the Fireworks billing API to find both the account ID and the key ID
+- the value shown is the rated subtotal for the configured key over the current UTC month
+- Fireworks aggregates costs daily and can lag live traffic, so an hourly refresh may not change every hour

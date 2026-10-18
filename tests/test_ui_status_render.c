@@ -44,7 +44,7 @@ static bool rows_are_solid_color(int start_y, int end_y) {
  * @return True when the status screen keeps the reserved rows clear.
  */
 static bool status_text_starts_below_icon_margin(void) {
-    ui_status_render_status(s_frame_buffer, UI_STATUS_LISTENING, NULL, 50);
+    ui_status_render_status(s_frame_buffer, UI_STATUS_LISTENING, NULL, 50, NULL);
 
     ASSERT_TRUE(rows_are_solid_color(TEST_CLEAR_START_Y, TEST_CLEAR_END_Y));
 
@@ -56,16 +56,39 @@ static bool status_text_starts_below_icon_margin(void) {
  * @return True when the clock screen keeps the reserved rows clear.
  */
 static bool clock_text_starts_below_icon_margin(void) {
-    ui_status_render_clock(s_frame_buffer, "12:34", "Sat Jul 11", "Test City", 50);
+    ui_status_render_clock(s_frame_buffer, "12:34", "Sat Jul 11", "Test City", 50, NULL);
 
     ASSERT_TRUE(rows_are_solid_color(TEST_CLEAR_START_Y, TEST_CLEAR_END_Y));
 
     return true;
 }
 
+/**
+ * @brief Verify the cost indicator renders into the bottom-right corner.
+ * @return True when the cost area contains pixels that differ from the background.
+ */
+static bool cost_text_renders_in_bottom_right(void) {
+    ui_status_render_status(s_frame_buffer, UI_STATUS_READY, NULL, 50, "$1.85");
+
+    const uint16_t bg = s_frame_buffer[0];
+    bool found = false;
+    for (int y = TEST_SCREEN_HEIGHT - 20; y < TEST_SCREEN_HEIGHT && !found; ++y) {
+        for (int x = TEST_SCREEN_WIDTH - 80; x < TEST_SCREEN_WIDTH; ++x) {
+            if (s_frame_buffer[((size_t) y * TEST_SCREEN_WIDTH) + x] != bg) {
+                found = true;
+                break;
+            }
+        }
+    }
+
+    ASSERT_TRUE(found);
+    return true;
+}
+
 const test_case_t g_ui_status_render_tests[] = {
     {"status text starts below icon margin", status_text_starts_below_icon_margin},
     {"clock text starts below icon margin", clock_text_starts_below_icon_margin},
+    {"cost text renders in bottom right", cost_text_renders_in_bottom_right},
 };
 
 const int g_ui_status_render_test_count =

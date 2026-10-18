@@ -74,6 +74,25 @@ static esp_err_t timer_command_execute(const assistant_command_context_t *contex
         return ESP_OK;
     }
 
+    if (dispatch->type == ASSISTANT_COMMAND_ACTION_SET_TIMER_DURATION) {
+        uint32_t seconds = dispatch->duration_seconds;
+        if (seconds == 0) {
+            snprintf(out_result->detail, sizeof(out_result->detail), "Could not understand timer");
+            out_result->err = ESP_ERR_INVALID_ARG;
+            return ESP_OK;
+        }
+        if (seconds > CONFIG_TIMER_MAX_DURATION_SECONDS) {
+            seconds = CONFIG_TIMER_MAX_DURATION_SECONDS;
+        }
+
+        timer_runtime_start(&rt->timer, seconds, monotonic_ms_now());
+        rt->direct_command_mode = false;
+        rt->direct_command_prepared = false;
+        timer_runtime_format_remaining(&rt->timer, monotonic_ms_now(), out_result->detail, sizeof(out_result->detail));
+        out_result->err = ESP_OK;
+        return ESP_OK;
+    }
+
     if (dispatch->type != ASSISTANT_COMMAND_ACTION_SET_TIMER) {
         snprintf(out_result->detail, sizeof(out_result->detail), "Timer command unavailable");
         out_result->err = ESP_ERR_NOT_SUPPORTED;
