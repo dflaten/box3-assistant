@@ -14,6 +14,10 @@ CONFIG_SPIRAM_SPEED_80M=y
 CONFIG_SPIRAM_FETCH_INSTRUCTIONS=y
 CONFIG_SPIRAM_RODATA=y
 
+# Run at full speed. The speech front end, MultiNet, and TTS are CPU bound, and
+# the routed path needs the extra headroom.
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_240=y
+
 CONFIG_MODEL_IN_FLASH=y
 CONFIG_AFE_INTERFACE_V1=y
 CONFIG_SR_NSN_WEBRTC=y
@@ -227,3 +231,10 @@ CONFIG_EN_SPEECH_COMMAND_ID199=""
 CONFIG_BSP_SPIFFS_FORMAT_ON_MOUNT_FAIL=y
 CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y
 CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=y
+
+# Internal RAM is scarce once the AFE, Wi-Fi, and task stacks are resident, and
+# the TLS handshake needs ~20 KB at once. Allocate mbedTLS buffers from PSRAM so
+# certificate verification does not fail with PSA_ERROR_INSUFFICIENT_MEMORY.
+# The ESP32-S3 crypto GDMA is configured with access_ext_mem, so hardware AES,
+# SHA, and MPI still work with PSRAM buffers.
+CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y

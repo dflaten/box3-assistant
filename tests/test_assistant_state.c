@@ -34,6 +34,16 @@ static bool test_detected_without_results_recovers(void) {
     return true;
 }
 
+static bool test_fastpath_decide_executes_defers_and_continues(void) {
+    ASSERT_EQ_INT(ASSISTANT_FASTPATH_EXECUTE, assistant_fastpath_decide(true, 0.95f, 1000, 2500, 0.90f));
+    ASSERT_EQ_INT(ASSISTANT_FASTPATH_EXECUTE, assistant_fastpath_decide(true, 0.90f, 3000, 2500, 0.90f));
+    ASSERT_EQ_INT(ASSISTANT_FASTPATH_CONTINUE, assistant_fastpath_decide(true, 0.80f, 1000, 2500, 0.90f));
+    ASSERT_EQ_INT(ASSISTANT_FASTPATH_DEFER, assistant_fastpath_decide(true, 0.80f, 2500, 2500, 0.90f));
+    ASSERT_EQ_INT(ASSISTANT_FASTPATH_CONTINUE, assistant_fastpath_decide(false, 0.0f, 1000, 2500, 0.90f));
+    ASSERT_EQ_INT(ASSISTANT_FASTPATH_DEFER, assistant_fastpath_decide(false, 0.0f, 2500, 2500, 0.90f));
+    return true;
+}
+
 static bool test_session_timeout_forces_recovery(void) {
     ASSERT_TRUE(!assistant_session_timed_out(false, true, 30000, 30000));
     ASSERT_TRUE(!assistant_session_timed_out(true, false, 30000, 30000));
@@ -71,6 +81,7 @@ const test_case_t g_assistant_state_tests[] = {
     {"command_timeout_forces_recovery", test_command_timeout_forces_recovery},
     {"timeout_rules_match_listening_behavior", test_timeout_rules_match_listening_behavior},
     {"detected_without_results_recovers", test_detected_without_results_recovers},
+    {"fastpath_decide_executes_defers_and_continues", test_fastpath_decide_executes_defers_and_continues},
     {"session_timeout_forces_recovery", test_session_timeout_forces_recovery},
     {"task_timeout_requires_heartbeat_and_threshold", test_task_timeout_requires_heartbeat_and_threshold},
     {"elapsed_ms_clamps_future_ticks", test_elapsed_ms_clamps_future_ticks},

@@ -33,6 +33,7 @@ cc -std=c11 -Wall -Wextra -Werror \
     "${ROOT_DIR}/tests/test_main.c" \
     "${ROOT_DIR}/tests/test_answer_pager.c" \
     "${ROOT_DIR}/tests/test_assistant_state.c" \
+    "${ROOT_DIR}/tests/test_capture_endpoint.c" \
     "${ROOT_DIR}/tests/test_command_dispatch.c" \
     "${ROOT_DIR}/tests/test_command_registry.c" \
     "${ROOT_DIR}/tests/test_command_text.c" \
@@ -53,6 +54,7 @@ cc -std=c11 -Wall -Wextra -Werror \
     "${ROOT_DIR}/tests/test_volume_control.c" \
     "${ROOT_DIR}/tests/test_weather_format.c" \
     "${ROOT_DIR}/main/assistant/answer_pager.c" \
+    "${ROOT_DIR}/main/assistant/capture_endpoint.c" \
     "${ROOT_DIR}/main/assistant/command_registry.c" \
     "${ROOT_DIR}/main/assistant/tool_dispatch.c" \
     "${ROOT_DIR}/main/commands/assistant_command_dispatch.c" \

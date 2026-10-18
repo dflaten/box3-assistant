@@ -173,6 +173,44 @@ config VOICE_ROUTING_SESSION_TIMEOUT_MS
     range 10000 180000
     default 90000
 
+config VOICE_ROUTING_EARLY_STOP_ENABLED
+    bool "End routed capture early after trailing silence"
+    default y
+
+config VOICE_ROUTING_MIN_CAPTURE_MS
+    int "Minimum routed capture duration before silence can end it in ms"
+    depends on VOICE_ROUTING_EARLY_STOP_ENABLED
+    range 0 15000
+    default 1000
+
+config VOICE_ROUTING_SILENCE_MS
+    int "Trailing silence required to end routed capture in ms"
+    depends on VOICE_ROUTING_EARLY_STOP_ENABLED
+    range 200 5000
+    default 1200
+
+config VOICE_ROUTING_SILENCE_RMS_THRESHOLD
+    int "RMS amplitude that counts as speech during routed capture"
+    depends on VOICE_ROUTING_EARLY_STOP_ENABLED
+    range 1 32767
+    default 600
+
+config VOICE_ROUTING_FASTPATH_ENABLED
+    bool "Run local command recognition during routed capture for a fast path"
+    default y
+
+config VOICE_ROUTING_FASTPATH_WINDOW_MS
+    int "Time allowed for the local fast path before routed understanding in ms"
+    depends on VOICE_ROUTING_FASTPATH_ENABLED
+    range 500 10000
+    default 3000
+
+config VOICE_ROUTING_FASTPATH_MIN_CONFIDENCE
+    int "Minimum local match confidence in percent for the fast path"
+    depends on VOICE_ROUTING_FASTPATH_ENABLED
+    range 50 100
+    default 90
+
 config FIREWORKS_COST_ENABLED
     bool "Show Fireworks monthly spend on the assistant screen"
     default n

@@ -6,6 +6,8 @@ extern const test_case_t g_answer_pager_tests[];
 extern const int g_answer_pager_test_count;
 extern const test_case_t g_assistant_state_tests[];
 extern const int g_assistant_state_test_count;
+extern const test_case_t g_capture_endpoint_tests[];
+extern const int g_capture_endpoint_test_count;
 extern const test_case_t g_command_dispatch_tests[];
 extern const int g_command_dispatch_test_count;
 extern const test_case_t g_command_registry_tests[];
@@ -67,6 +69,7 @@ static void run_test_cases(const test_case_t *tests, int count) {
 int main(void) {
     run_test_cases(g_answer_pager_tests, g_answer_pager_test_count);
     run_test_cases(g_assistant_state_tests, g_assistant_state_test_count);
+    run_test_cases(g_capture_endpoint_tests, g_capture_endpoint_test_count);
     run_test_cases(g_command_dispatch_tests, g_command_dispatch_test_count);
     run_test_cases(g_command_registry_tests, g_command_registry_test_count);
     run_test_cases(g_command_text_tests, g_command_text_test_count);

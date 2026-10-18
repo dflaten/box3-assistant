@@ -20,6 +20,7 @@
 #include "esp_wn_models.h"
 
 #include "assistant/answer_pager.h"
+#include "assistant/capture_endpoint.h"
 #include "assistant/command_registry.h"
 #include "assistant/followup_audio.h"
 #include "assistant/presence.h"
@@ -41,6 +42,8 @@
 
 #define COMMAND_WINDOW_MS                  10000
 #define COMMAND_MIN_LISTEN_MS              3000
+#define AUDIO_FEED_TASK_STACK              8192
+#define SPEECH_DETECT_TASK_STACK           24576
 #define MAX_FETCH_FAILURES                 50
 #define ASSISTANT_HEARTBEAT_SLEEP_SLICE_MS 250
 #define WEATHER_STATUS_HOLD_MS             30000
@@ -389,6 +392,112 @@ static void routed_execute_tool(assistant_runtime_t *rt, const fireworks_respons
     assistant_session_show_status_then_return_to_standby(rt, UI_STATUS_ERROR, detail, STATUS_HOLD_TIME);
 }
 
+#ifdef CONFIG_VOICE_ROUTING_FASTPATH_ENABLED
+/**
+ * @brief State for the local command fast path that runs alongside routed capture.
+ * @note Feeding the recognizer the same raw audio that is captured for STT means a known phrase executes quickly
+ * without losing any audio if the local match never fires.
+ */
+typedef struct {
+    /** Shared assistant runtime that owns the MultiNet recognizer and Hue groups. */
+    assistant_runtime_t *rt;
+    /** Sample count the recognizer expects per detect call. */
+    int chunk_size;
+    /** Accumulator that batches captured samples up to chunk_size. */
+    int16_t *accum;
+    /** Samples currently buffered in accum. */
+    size_t accum_count;
+    /** Time allowed for a local match before deferring to routed understanding. */
+    uint32_t window_ms;
+    /** Minimum probability required to accept a local match. */
+    float min_confidence;
+    /** True once a confident local command was accepted. */
+    bool matched;
+    /** True once the fast path stopped feeding the recognizer for this capture. */
+    bool deferred;
+    /** Recognized command id when matched is true. */
+    int command_id;
+    /** Human-readable label for the recognized command. */
+    char command_text[96];
+} routed_fastpath_t;
+
+/**
+ * @brief Feed one captured chunk to MultiNet and flag a confident local command match.
+ * @param context Pointer to the active routed_fastpath_t state.
+ * @param samples Mono PCM16 samples for the newest chunk.
+ * @param sample_count Number of valid samples in the chunk.
+ * @param elapsed_ms Milliseconds of audio captured so far.
+ * @return True when a confident local command was accepted and capture should stop, otherwise false.
+ */
+static bool routed_fastpath_on_chunk(void *context, const int16_t *samples, size_t sample_count, uint32_t elapsed_ms) {
+    routed_fastpath_t *fast = (routed_fastpath_t *) context;
+    if (fast == NULL) {
+        return false;
+    }
+    if (fast->matched || fast->deferred) {
+        return fast->matched;
+    }
+    if (fast->rt->multinet == NULL || fast->rt->model_data == NULL || fast->chunk_size <= 0 || fast->accum == NULL) {
+        fast->deferred = true;
+        return false;
+    }
+
+    size_t offset = 0;
+    while (offset < sample_count) {
+        size_t room = (size_t) fast->chunk_size - fast->accum_count;
+        size_t take = (sample_count - offset) < room ? (sample_count - offset) : room;
+        memcpy(fast->accum + fast->accum_count, samples + offset, take * sizeof(int16_t));
+        fast->accum_count += take;
+        offset += take;
+        if (fast->accum_count < (size_t) fast->chunk_size) {
+            break;
+        }
+
+        esp_mn_state_t state = fast->rt->multinet->detect(fast->rt->model_data, fast->accum);
+        fast->accum_count = 0;
+
+        bool detected = false;
+        float confidence = 0.0f;
+        int command_id = 0;
+        if (state == ESP_MN_STATE_DETECTED) {
+            esp_mn_results_t *results = fast->rt->multinet->get_results(fast->rt->model_data);
+            if (results != NULL && results->num > 0) {
+                detected = true;
+                confidence = results->prob[0];
+                command_id = results->command_id[0];
+            }
+        }
+
+        assistant_fastpath_action_t action =
+            assistant_fastpath_decide(detected, confidence, elapsed_ms, fast->window_ms, fast->min_confidence);
+        if (action == ASSISTANT_FASTPATH_EXECUTE) {
+            fast->matched = true;
+            fast->command_id = command_id;
+            const char *text = assistant_command_text(
+                command_id, fast->rt->groups, fast->rt->group_count, fast->command_text, sizeof(fast->command_text));
+            if (text != NULL && text != fast->command_text) {
+                snprintf(fast->command_text, sizeof(fast->command_text), "%s", text);
+            }
+            ESP_LOGI(TAG,
+                     "Fast-path local command matched: id=%d text=\"%s\" prob=%.3f elapsed_ms=%lu",
+                     command_id,
+                     fast->command_text,
+                     confidence,
+                     (unsigned long) elapsed_ms);
+            return true;
+        }
+        if (action == ASSISTANT_FASTPATH_DEFER) {
+            fast->deferred = true;
+            return false;
+        }
+        /* Do not reset the recognizer here: it accumulates audio across detect() calls, so a reset would discard the
+         * utterance that is still being recognized and prevent a later match. */
+    }
+
+    return false;
+}
+#endif
+
 /**
  * @brief Run one model-routed interaction from wake word through answer or execution.
  * @param rt Shared assistant runtime state for the active interaction.
@@ -413,10 +522,72 @@ static void routed_session_run(assistant_runtime_t *rt) {
         vTaskDelay(pdMS_TO_TICKS(1));
     }
 
+    capture_endpoint_t *endpoint_ptr = NULL;
+#ifdef CONFIG_VOICE_ROUTING_EARLY_STOP_ENABLED
+    capture_endpoint_t endpoint;
+    uint32_t min_capture_ms = CONFIG_VOICE_ROUTING_MIN_CAPTURE_MS;
+#ifdef CONFIG_VOICE_ROUTING_FASTPATH_ENABLED
+    /* Give the local recognizer its full window before silence may end the capture, so it is not cut off mid-phrase. */
+    if (CONFIG_VOICE_ROUTING_FASTPATH_WINDOW_MS > min_capture_ms) {
+        min_capture_ms = CONFIG_VOICE_ROUTING_FASTPATH_WINDOW_MS;
+    }
+#endif
+    capture_endpoint_config_t endpoint_config = {
+        .sample_rate_hz = ROUTED_SAMPLE_RATE_HZ,
+        .min_capture_ms = min_capture_ms,
+        .max_capture_ms = CONFIG_VOICE_ROUTING_CAPTURE_MS,
+        .trailing_silence_ms = CONFIG_VOICE_ROUTING_SILENCE_MS,
+        .rms_threshold = CONFIG_VOICE_ROUTING_SILENCE_RMS_THRESHOLD,
+    };
+    capture_endpoint_init(&endpoint, &endpoint_config);
+    endpoint_ptr = &endpoint;
+#endif
+
     uint8_t *pcm = NULL;
     size_t pcm_size = 0;
-    esp_err_t err = assistant_followup_audio_capture_mono(
-        rt, CONFIG_VOICE_ROUTING_CAPTURE_MS, ROUTED_SAMPLE_RATE_HZ, &pcm, &pcm_size);
+#ifdef CONFIG_VOICE_ROUTING_FASTPATH_ENABLED
+    routed_fastpath_t fastpath = {
+        .rt = rt,
+        .chunk_size = 0,
+        .accum = NULL,
+        .accum_count = 0,
+        .window_ms = CONFIG_VOICE_ROUTING_FASTPATH_WINDOW_MS,
+        .min_confidence = (float) CONFIG_VOICE_ROUTING_FASTPATH_MIN_CONFIDENCE / 100.0f,
+        .matched = false,
+        .deferred = false,
+        .command_id = 0,
+        .command_text = {0},
+    };
+    if (rt->multinet != NULL && rt->model_data != NULL) {
+        fastpath.chunk_size = rt->multinet->get_samp_chunksize(rt->model_data);
+        if (fastpath.chunk_size > 0) {
+            fastpath.accum = calloc((size_t) fastpath.chunk_size, sizeof(int16_t));
+            if (fastpath.accum == NULL) {
+                ESP_LOGW(TAG, "Fast path disabled: accumulator allocation failed");
+                fastpath.chunk_size = 0;
+            }
+        }
+        rt->multinet->clean(rt->model_data);
+    }
+    esp_err_t err = assistant_followup_audio_capture_mono_until(rt,
+                                                                CONFIG_VOICE_ROUTING_CAPTURE_MS,
+                                                                endpoint_ptr,
+                                                                ROUTED_SAMPLE_RATE_HZ,
+                                                                routed_fastpath_on_chunk,
+                                                                &fastpath,
+                                                                &pcm,
+                                                                &pcm_size);
+    free(fastpath.accum);
+    fastpath.accum = NULL;
+    if (err == ESP_OK && fastpath.matched) {
+        free(pcm);
+        execute_command(rt, fastpath.command_id, fastpath.command_text);
+        return;
+    }
+#else
+    esp_err_t err = assistant_followup_audio_capture_mono_until(
+        rt, CONFIG_VOICE_ROUTING_CAPTURE_MS, endpoint_ptr, ROUTED_SAMPLE_RATE_HZ, NULL, NULL, &pcm, &pcm_size);
+#endif
     if (err != ESP_OK) {
         assistant_session_show_status_then_return_to_standby(
             rt, UI_STATUS_ERROR, "Audio capture failed", STATUS_HOLD_TIME);
@@ -443,7 +614,7 @@ static void routed_session_run(assistant_runtime_t *rt) {
     char system_prompt[FIREWORKS_SYSTEM_PROMPT_MAX_LEN];
     fireworks_request_build_system_prompt(rt->groups, rt->group_count, system_prompt, sizeof(system_prompt));
     char *tools_json = fireworks_request_build_tools_json(
-        ASSISTANT_HUE_TOOL_ENABLED, ASSISTANT_TIMER_TOOL_ENABLED, ASSISTANT_WEATHER_TOOL_ENABLED, true);
+        ASSISTANT_HUE_TOOL_ENABLED, ASSISTANT_TIMER_TOOL_ENABLED, ASSISTANT_WEATHER_TOOL_ENABLED, true, true);
     fireworks_response_t response = {0};
     err = fireworks_client_complete(system_prompt, transcript, tools_json, &response);
     free(tools_json);
@@ -594,8 +765,9 @@ esp_err_t assistant_session_init_models(assistant_runtime_t *rt) {
  * @return This function does not return a value.
  */
 void assistant_session_start_tasks(assistant_runtime_t *rt) {
-    xTaskCreatePinnedToCore(audio_feed_task, "audio_feed", 8192, rt, 6, NULL, 0);
-    xTaskCreatePinnedToCore(speech_detect_task, "speech_detect", 12288, rt, 5, NULL, 1);
+    xTaskCreatePinnedToCore(audio_feed_task, "audio_feed", AUDIO_FEED_TASK_STACK, rt, 6, NULL, 0);
+    /* TTS playback, STT, and the model client all run on this task, so its stack must cover the deepest path. */
+    xTaskCreatePinnedToCore(speech_detect_task, "speech_detect", SPEECH_DETECT_TASK_STACK, rt, 5, NULL, 1);
 }
 
 /**

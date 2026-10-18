@@ -57,6 +57,29 @@ assistant_listen_step_t assistant_step_for_multinet(uint32_t elapsed_ms,
 }
 
 /**
+ * @brief Decide whether a fast-path command match should be executed, waited on, or deferred to routing.
+ * @param detected True when the local recognizer reported a command for the current audio.
+ * @param confidence Recognizer probability for the reported command.
+ * @param elapsed_ms Milliseconds of audio processed since the fast-path window opened.
+ * @param window_ms Maximum time allowed for the local fast path before deferring to routed understanding.
+ * @param min_confidence Minimum probability required to accept a local match.
+ * @return EXECUTE to run the matched command, DEFER to hand off to routed capture, otherwise CONTINUE.
+ * @note A confident match always wins, so a known phrase is executed even after the window would have deferred it.
+ */
+assistant_fastpath_action_t assistant_fastpath_decide(
+    bool detected, float confidence, uint32_t elapsed_ms, uint32_t window_ms, float min_confidence) {
+    if (detected && confidence >= min_confidence) {
+        return ASSISTANT_FASTPATH_EXECUTE;
+    }
+
+    if (elapsed_ms >= window_ms) {
+        return ASSISTANT_FASTPATH_DEFER;
+    }
+
+    return ASSISTANT_FASTPATH_CONTINUE;
+}
+
+/**
  * @brief Convert two tick snapshots into elapsed milliseconds without wrapping on out-of-order reads.
  * @param now_tick The current scheduler tick snapshot.
  * @param then_tick The earlier scheduler tick snapshot to compare against.

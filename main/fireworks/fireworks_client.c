@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "esp_crt_bundle.h"
+#include "esp_heap_caps.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
 
@@ -99,10 +100,15 @@ esp_err_t fireworks_client_complete(const char *system_prompt,
 
     s_active_client = client;
     ESP_LOGI(TAG,
-             "Starting Fireworks request: url=%s model=%s bytes=%u",
+             "Starting Fireworks request: url=%s model=%s bytes=%u internal_free=%u internal_largest=%u "
+             "dma_free=%u dma_largest=%u",
              url,
              CONFIG_FIREWORKS_MODEL,
-             (unsigned) strlen(body));
+             (unsigned) strlen(body),
+             (unsigned) heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+             (unsigned) heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL),
+             (unsigned) heap_caps_get_free_size(MALLOC_CAP_DMA),
+             (unsigned) heap_caps_get_largest_free_block(MALLOC_CAP_DMA));
 
     esp_err_t err = esp_http_client_perform(client);
     int status = esp_http_client_get_status_code(client);

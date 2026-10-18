@@ -13,11 +13,13 @@
  * @param timer_enabled True to advertise the timer tool.
  * @param weather_enabled True to advertise the weather tool.
  * @param volume_enabled True to advertise the volume tool.
+ * @param time_enabled True to advertise the local time tool.
  * @return Heap-allocated JSON array string owned by the caller, or NULL on allocation failure.
- * @note Disabled integrations are omitted so the model cannot select them.
+ * @note Disabled integrations are omitted so the model cannot select them. The time tool is required for the model to
+ * answer clock questions, because the model has no clock of its own.
  */
-char *
-fireworks_request_build_tools_json(bool hue_enabled, bool timer_enabled, bool weather_enabled, bool volume_enabled);
+char *fireworks_request_build_tools_json(
+    bool hue_enabled, bool timer_enabled, bool weather_enabled, bool volume_enabled, bool time_enabled);
 
 /**
  * @brief Build the system prompt describing the assistant persona and known Hue groups.
