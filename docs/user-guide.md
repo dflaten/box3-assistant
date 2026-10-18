@@ -82,6 +82,8 @@ Say `what time is it` to hear the current time for the configured home location.
 
 Say `current time in` to look up the current time for another city.
 
+When Fireworks voice routing is enabled, `what time is it` is answered by the local fast path, and a paraphrase such as `what's the time` reaches the same local time handler through the model's `time_now` tool, so the device clock is always the source of truth.
+
 The remote time flow:
 
 1. say `Hi ESP`

@@ -124,10 +124,12 @@ The recommended approach is universal routing behind a feature flag:
 - tools are advertised to the model based on the other integration feature
   flags, so disabled integrations are not offered to the model
 
-A hybrid mode that keeps MultiNet as a fast local path for known phrases is a
-possible later refinement, but it is not part of the first implementation. Two
-understanders introduce ambiguity and extra routing logic, and the flag already
-covers the offline case.
+A hybrid mode that keeps MultiNet as a fast local path for known phrases was
+left out of the first implementation. It has since been added: MultiNet runs on
+the same captured audio as the routed path, so a known phrase executes locally
+without STT or a model round trip while free-form questions still fall through.
+The two-understander ambiguity is bounded by a confidence gate and a short fast
+path window.
 
 ### High-level component flow
 
@@ -475,15 +477,27 @@ Included:
 - per-phase watchdog timeouts
 - host unit tests for all new pure modules
 
+Implemented after the first pass to protect control latency and clock questions:
+
+- energy-based early capture stop, configurable through
+  `CONFIG_VOICE_ROUTING_EARLY_STOP_ENABLED` and its silence thresholds
+- a local MultiNet fast path that runs on the same captured audio and executes
+  known phrases without STT or a model round trip, configurable through
+  `CONFIG_VOICE_ROUTING_FASTPATH_ENABLED`
+- a `time_now` tool so clock questions reach the local time handler, because the
+  model has no clock of its own
+
 Deferred:
 
 - streaming transcription
 - streaming model responses
 - multi-turn conversation memory
 - silence-based end-of-speech detection
-- energy-based early capture stop
-- barge-in during answer speech
-- hybrid MultiNet fast-path routing
+- barge-in during answer speech. An early attempt ran MultiNet on the captured
+  audio during playback, but without an AFE echo reference the recognizer hears
+  the assistant's own speech, which makes its beam search slow enough to starve
+  the CPU and trip the task watchdog. It needs echo cancellation, or listening
+  in the silent gaps between answer pages, before it can return
 - larger answer model selection
 - Jellyfin or media tools
 - migration of the timer duration and city follow-up flows onto this path
@@ -521,8 +535,10 @@ Approximate expected phases:
 - speech: under one second to first audio
 
 A fast function-calling model keeps control commands near the low end. General
-answers can afford the higher end. If control latency is unacceptable later, the
-deferred hybrid fast path is the mitigation.
+answers can afford the higher end. The local fast path now removes the capture,
+STT, and model cost for known phrases, and the early capture stop shortens the
+capture window for everything else, so only genuinely free-form questions pay
+the full budget.
 
 ## Open Questions
 

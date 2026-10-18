@@ -94,7 +94,7 @@ Notes:
 
 ## Fireworks Voice Routing
 
-Fireworks voice routing is optional and disabled by default. When enabled, every utterance after the wake word is captured, transcribed by the local STT service, and sent to a model on Fireworks AI. The model either selects a local action (Hue, timer, weather, or volume) or answers a general question.
+Fireworks voice routing is optional and disabled by default. When enabled, every utterance after the wake word is captured, transcribed by the local STT service, and sent to a model on Fireworks AI. The model either selects a local action (Hue, timer, weather, volume, or the local clock) or answers a general question.
 
 Recommended local defaults:
 
@@ -117,6 +117,35 @@ Notes:
 - recorded audio stays on the LAN; only the transcript and the returned text are sent to Fireworks
 - when routing is disabled, the firmware keeps the local MultiNet command path
 - the integration flags `CONFIG_INTEGRATION_HUE_ENABLED`, `CONFIG_INTEGRATION_WEATHER_ENABLED`, and `CONFIG_INTEGRATION_TIMER_ENABLED` control which actions are offered to the model
+- the model has no clock of its own, so clock questions resolve through a `time_now` tool that runs the same local time handler as the MultiNet path
+
+### Routed Capture Latency
+
+The routed path pays a fixed capture window plus STT and a model round trip before a command runs. Two options shorten the common case.
+
+Early capture stop ends the capture once speech is followed by a quiet gap instead of always waiting for the full window:
+
+```text
+CONFIG_VOICE_ROUTING_EARLY_STOP_ENABLED=y
+CONFIG_VOICE_ROUTING_MIN_CAPTURE_MS=1000
+CONFIG_VOICE_ROUTING_SILENCE_MS=1200
+CONFIG_VOICE_ROUTING_SILENCE_RMS_THRESHOLD=600
+```
+
+- `CONFIG_VOICE_ROUTING_SILENCE_RMS_THRESHOLD` is a raw PCM16 root-mean-square amplitude and depends on microphone gain; raise it if background noise counts as speech, lower it if speech is missed
+- `CONFIG_VOICE_ROUTING_CAPTURE_MS` remains the hard upper bound even when early stop is enabled
+
+The local fast path runs MultiNet on the same captured audio, so a recognized phrase such as `turn off living room` or `what time is it` executes locally in about a second while free-form questions still fall through to STT and the model:
+
+```text
+CONFIG_VOICE_ROUTING_FASTPATH_ENABLED=y
+CONFIG_VOICE_ROUTING_FASTPATH_WINDOW_MS=3000
+CONFIG_VOICE_ROUTING_FASTPATH_MIN_CONFIDENCE=90
+```
+
+- `CONFIG_VOICE_ROUTING_FASTPATH_MIN_CONFIDENCE` is a percent and gates the accepted local match to reduce false positives
+- the fast path feeds the recognizer raw microphone audio rather than the processed audio front end, so validate its accuracy on device and lower `CONFIG_VOICE_ROUTING_FASTPATH_WINDOW_MS` or disable the fast path if it misfires
+- capture always continues to the STT path when no confident local match is found, so no audio is lost
 
 ### Monthly Spend Indicator
 

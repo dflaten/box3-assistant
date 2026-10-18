@@ -20,7 +20,7 @@ static bool tool_schema_contains(const cJSON *tools, const char *name) {
 }
 
 static bool test_fireworks_tools_respect_integration_flags(void) {
-    char *all = fireworks_request_build_tools_json(true, true, true, true);
+    char *all = fireworks_request_build_tools_json(true, true, true, true, true);
     ASSERT_TRUE(all != NULL);
 
     cJSON *tools = cJSON_Parse(all);
@@ -29,17 +29,37 @@ static bool test_fireworks_tools_respect_integration_flags(void) {
     ASSERT_TRUE(tool_schema_contains(tools, "timer_start"));
     ASSERT_TRUE(tool_schema_contains(tools, "weather_get"));
     ASSERT_TRUE(tool_schema_contains(tools, "volume_adjust"));
+    ASSERT_TRUE(tool_schema_contains(tools, "time_now"));
     cJSON_Delete(tools);
     free(all);
 
-    char *hue_only = fireworks_request_build_tools_json(true, false, false, false);
+    char *hue_only = fireworks_request_build_tools_json(true, false, false, false, false);
     ASSERT_TRUE(hue_only != NULL);
     tools = cJSON_Parse(hue_only);
     ASSERT_TRUE(tool_schema_contains(tools, "hue_set_group"));
     ASSERT_TRUE(!tool_schema_contains(tools, "timer_start"));
     ASSERT_TRUE(!tool_schema_contains(tools, "weather_get"));
+    ASSERT_TRUE(!tool_schema_contains(tools, "time_now"));
     cJSON_Delete(tools);
     free(hue_only);
+    return true;
+}
+
+static bool test_fireworks_time_tool_has_no_required_parameters(void) {
+    char *time_only = fireworks_request_build_tools_json(false, false, false, false, true);
+    ASSERT_TRUE(time_only != NULL);
+
+    cJSON *tools = cJSON_Parse(time_only);
+    ASSERT_TRUE(cJSON_IsArray(tools));
+    ASSERT_EQ_INT(1, cJSON_GetArraySize(tools));
+
+    const cJSON *tool = cJSON_GetArrayItem(tools, 0);
+    const cJSON *function = cJSON_GetObjectItemCaseSensitive(tool, "function");
+    const cJSON *parameters = cJSON_GetObjectItemCaseSensitive(function, "parameters");
+    ASSERT_TRUE(cJSON_GetObjectItemCaseSensitive(parameters, "required") == NULL);
+
+    cJSON_Delete(tools);
+    free(time_only);
     return true;
 }
 
@@ -61,7 +81,7 @@ static bool test_fireworks_system_prompt_lists_groups(void) {
 }
 
 static bool test_fireworks_request_body_includes_messages_and_tools(void) {
-    char *tools = fireworks_request_build_tools_json(true, false, false, false);
+    char *tools = fireworks_request_build_tools_json(true, false, false, false, false);
     ASSERT_TRUE(tools != NULL);
 
     char *body = fireworks_request_build_body("test-model", "system text", "turn off the lights", tools, 128);
@@ -127,6 +147,7 @@ static bool test_fireworks_build_url_normalizes_base(void) {
 
 const test_case_t g_fireworks_request_tests[] = {
     {"fireworks_tools_respect_integration_flags", test_fireworks_tools_respect_integration_flags},
+    {"fireworks_time_tool_has_no_required_parameters", test_fireworks_time_tool_has_no_required_parameters},
     {"fireworks_system_prompt_lists_groups", test_fireworks_system_prompt_lists_groups},
     {"fireworks_request_body_includes_messages_and_tools", test_fireworks_request_body_includes_messages_and_tools},
     {"fireworks_request_body_without_tools", test_fireworks_request_body_without_tools},

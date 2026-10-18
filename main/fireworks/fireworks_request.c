@@ -106,17 +106,17 @@ static void fireworks_request_add_property(cJSON *properties, const fireworks_to
  * @param tools Tool schema array to extend.
  * @param name Function name.
  * @param description Human-readable description of the function.
- * @param properties Required properties for the function.
+ * @param properties Required properties for the function, or NULL when property_count is zero.
  * @param property_count Number of entries in properties.
  * @return This function does not return a value.
- * @note Every advertised property is treated as required, which matches the fixed tool set.
+ * @note Every advertised property is treated as required. A tool with property_count zero advertises no parameters.
  */
 static void fireworks_request_add_tool(cJSON *tools,
                                        const char *name,
                                        const char *description,
                                        const fireworks_tool_property_t *properties,
                                        size_t property_count) {
-    if (!cJSON_IsArray(tools) || name == NULL || properties == NULL) {
+    if (!cJSON_IsArray(tools) || name == NULL || (properties == NULL && property_count > 0)) {
         return;
     }
 
@@ -146,7 +146,11 @@ static void fireworks_request_add_tool(cJSON *tools,
     cJSON_AddStringToObject(function, "description", description);
     cJSON_AddStringToObject(parameters, "type", "object");
     cJSON_AddItemToObject(parameters, "properties", property_object);
-    cJSON_AddItemToObject(parameters, "required", required);
+    if (property_count > 0) {
+        cJSON_AddItemToObject(parameters, "required", required);
+    } else {
+        cJSON_Delete(required);
+    }
     cJSON_AddItemToObject(function, "parameters", parameters);
     cJSON_AddItemToObject(tool, "function", function);
     cJSON_AddItemToArray(tools, tool);
@@ -158,10 +162,12 @@ static void fireworks_request_add_tool(cJSON *tools,
  * @param timer_enabled True to advertise the timer tool.
  * @param weather_enabled True to advertise the weather tool.
  * @param volume_enabled True to advertise the volume tool.
+ * @param time_enabled True to advertise the local time tool.
  * @return Heap-allocated JSON array string owned by the caller, or NULL on allocation failure.
+ * @note The time tool is required for the model to answer clock questions, because the model has no clock of its own.
  */
-char *
-fireworks_request_build_tools_json(bool hue_enabled, bool timer_enabled, bool weather_enabled, bool volume_enabled) {
+char *fireworks_request_build_tools_json(
+    bool hue_enabled, bool timer_enabled, bool weather_enabled, bool volume_enabled, bool time_enabled) {
     cJSON *tools = cJSON_CreateArray();
     if (tools == NULL) {
         return NULL;
@@ -195,6 +201,10 @@ fireworks_request_build_tools_json(bool hue_enabled, bool timer_enabled, bool we
         };
         fireworks_request_add_tool(
             tools, "volume_adjust", "Adjust the speaker volume in ten-percent steps.", properties, 1);
+    }
+
+    if (time_enabled) {
+        fireworks_request_add_tool(tools, "time_now", "Get the current local time for the home location.", NULL, 0);
     }
 
     char *json = cJSON_PrintUnformatted(tools);

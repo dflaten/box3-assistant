@@ -94,6 +94,13 @@ static bool test_tool_dispatch_volume_direction_and_clamp(void) {
     return true;
 }
 
+static bool test_tool_dispatch_time_now(void) {
+    tool_dispatch_result_t result = resolve("time_now", "{}");
+    ASSERT_EQ_INT(TOOL_DISPATCH_OK, result.status);
+    ASSERT_EQ_INT(ASSISTANT_COMMAND_ACTION_TIME_NOW, result.dispatch.type);
+    return true;
+}
+
 static bool test_tool_dispatch_unknown_and_malformed(void) {
     tool_dispatch_result_t result = resolve("do_the_thing", "{}");
     ASSERT_EQ_INT(TOOL_DISPATCH_UNKNOWN_TOOL, result.status);
@@ -112,6 +119,7 @@ const test_case_t g_tool_dispatch_tests[] = {
     {"tool_dispatch_timer_clamps_duration", test_tool_dispatch_timer_clamps_duration},
     {"tool_dispatch_weather_period", test_tool_dispatch_weather_period},
     {"tool_dispatch_volume_direction_and_clamp", test_tool_dispatch_volume_direction_and_clamp},
+    {"tool_dispatch_time_now", test_tool_dispatch_time_now},
     {"tool_dispatch_unknown_and_malformed", test_tool_dispatch_unknown_and_malformed},
 };
 

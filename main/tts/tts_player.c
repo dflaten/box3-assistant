@@ -11,7 +11,7 @@
 #include "tts/local_tts_client.h"
 
 #define TTS_PLAYER_OUTPUT_SAMPLE_RATE    16000
-#define TTS_PLAYER_RESAMPLE_BUFFER_BYTES 2048
+#define TTS_PLAYER_RESAMPLE_BUFFER_BYTES 1024
 
 typedef struct {
     bool started;

@@ -22,7 +22,7 @@
 #define LOCAL_TTS_RESPONSE_INITIAL_BYTES 4096
 #define LOCAL_TTS_MAX_RESPONSE_BYTES     (320 * 1024)
 #define LOCAL_TTS_LINE_MAX_BYTES         512
-#define LOCAL_TTS_STREAM_CHUNK_BYTES     2048
+#define LOCAL_TTS_STREAM_CHUNK_BYTES     1024
 
 typedef struct {
     uint8_t *body;

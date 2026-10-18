@@ -174,6 +174,18 @@ static void tool_dispatch_resolve_weather(const cJSON *arguments, tool_dispatch_
 }
 
 /**
+ * @brief Resolve a time_now tool call into a local time dispatch.
+ * @param result Result structure to populate.
+ * @return This function does not return a value.
+ * @note The model has no clock of its own, so a clock question must resolve to the local time handler.
+ */
+static void tool_dispatch_resolve_time(tool_dispatch_result_t *result) {
+    result->status = TOOL_DISPATCH_OK;
+    result->dispatch.type = ASSISTANT_COMMAND_ACTION_TIME_NOW;
+    snprintf(result->detail, sizeof(result->detail), "Current time");
+}
+
+/**
  * @brief Resolve a volume_adjust tool call into a volume dispatch.
  * @param arguments Parsed tool argument object.
  * @param max_volume_steps Upper bound applied to the absolute step count.
@@ -243,6 +255,8 @@ tool_dispatch_result_t tool_dispatch_resolve(const char *tool_name,
         tool_dispatch_resolve_timer(arguments, max_timer_seconds, &result);
     } else if (strcmp(tool_name, "weather_get") == 0) {
         tool_dispatch_resolve_weather(arguments, &result);
+    } else if (strcmp(tool_name, "time_now") == 0) {
+        tool_dispatch_resolve_time(&result);
     } else if (strcmp(tool_name, "volume_adjust") == 0) {
         tool_dispatch_resolve_volume(arguments, max_volume_steps, &result);
     } else {
