@@ -37,6 +37,33 @@ CONFIG_HUE_BRIDGE_API_KEY="your-hue-api-key"
 
 The firmware discovers and caches the Hue bridge address automatically, so a Hue bridge IP is not required for normal setup.
 
+## Wake Word Sensitivity
+
+The wake word is detected locally by WakeNet. The tracked defaults use the full `wn9_hiesp` model, which is the ESP32-S3 model. The smaller `wn9s_hiesp` model is intended for chips without PSRAM or SIMD and is more likely to accept background speech as a wake word.
+
+If ordinary conversation falsely wakes the device, raise the WakeNet trigger threshold:
+
+```text
+CONFIG_ASSISTANT_WAKE_WORD_THRESHOLD=66
+```
+
+- the value is a percentage and `0` keeps the ESP-SR model default, which is about 63 percent for `Hi ESP`
+- raise it only in small steps, such as `65`, `66`, or `68`; values around `75` or higher can suppress real detections entirely
+- lower it back toward `0` if the wake word is missed
+- this threshold applies to the raw WakeNet score, so a small change has a noticeable effect
+
+The microphone gain also affects false wakes:
+
+```text
+CONFIG_HUE_MIC_GAIN_DB=30
+```
+
+Lower it in steps of 2-4 dB if the device picks up distant conversation and room noise more readily than it should. Raise it if commands from across the room are missed.
+
+When routed voice capture is enabled with early stop, a wake that is not followed by audio above `CONFIG_VOICE_ROUTING_SILENCE_RMS_THRESHOLD` is discarded before STT or the model is called.
+
+`Hi ESP` is a short two-syllable phrase, so it is inherently easier to confuse than a longer wake word. Switching wake words requires enabling the matching `CONFIG_SR_WN_WN9_*` model, updating the model filter in `main/assistant/session.c`, and updating the user-facing wording in the user guide.
+
 ## Home Location
 
 The assistant home location is configurable through `menuconfig` or `sdkconfig.defaults.local`. Weather and the default time command both use this shared home value, so changing home only requires updating one location block. The tracked defaults use New York City.
@@ -146,6 +173,8 @@ CONFIG_VOICE_ROUTING_FASTPATH_MIN_CONFIDENCE=90
 - `CONFIG_VOICE_ROUTING_FASTPATH_MIN_CONFIDENCE` is a percent and gates the accepted local match to reduce false positives
 - the fast path feeds the recognizer raw microphone audio rather than the processed audio front end, so validate its accuracy on device and lower `CONFIG_VOICE_ROUTING_FASTPATH_WINDOW_MS` or disable the fast path if it misfires
 - capture always continues to the STT path when no confident local match is found, so no audio is lost
+
+After STT completes, a second local matcher checks conservative Hue on/off requests such as `turn on the living room`, `switch off bedroom`, or `lights on in the kitchen` against the synced group list before calling Fireworks. It uses fuzzy group-name matching, so partial names and extra words like `lights` are accepted, while questions, multi-clause requests, and unknown groups fall through to the model.
 
 ### Monthly Spend Indicator
 

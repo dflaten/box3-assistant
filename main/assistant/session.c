@@ -36,6 +36,7 @@
 #include "fireworks/fireworks_request.h"
 #include "fireworks/fireworks_response_parse.h"
 #include "hue/hue_command_runtime.h"
+#include "hue/hue_voice_intent.h"
 #include "stt/local_stt_client.h"
 #include "system/time_support.h"
 #include "tts/tts_player.h"
@@ -594,6 +595,17 @@ static void routed_session_run(assistant_runtime_t *rt) {
         return;
     }
 
+#ifdef CONFIG_VOICE_ROUTING_EARLY_STOP_ENABLED
+    /* A false wake followed by silence or sub-threshold noise should not reach STT or the model. */
+    if (!endpoint.speech_detected) {
+        ESP_LOGI(TAG, "Ignoring wake with no speech above the capture threshold");
+        free(pcm);
+        assistant_session_show_status_then_return_to_standby(
+            rt, UI_STATUS_READY, "I didn't catch that", STATUS_HOLD_TIME);
+        return;
+    }
+#endif
+
     rt->assistant_stage = ASSISTANT_STAGE_TRANSCRIBING;
     ui_status_set(UI_STATUS_WORKING, "Transcribing");
     char transcript[ROUTED_TRANSCRIPT_LEN];
@@ -608,6 +620,27 @@ static void routed_session_run(assistant_runtime_t *rt) {
             rt, UI_STATUS_ERROR, "I didn't catch that", STATUS_HOLD_TIME);
         return;
     }
+
+#if ASSISTANT_HUE_TOOL_ENABLED
+    /* Known Hue on/off requests are deterministic, so keep them local even when MultiNet missed the phrase. */
+    hue_voice_intent_t local_intent;
+    if (hue_voice_intent_parse(transcript, rt->groups, rt->group_count, &local_intent)) {
+        char detail[ASSISTANT_COMMAND_RESULT_DETAIL_LEN];
+        snprintf(detail,
+                 sizeof(detail),
+                 "Turn %s %s",
+                 local_intent.on ? "on" : "off",
+                 rt->groups[local_intent.group_index].name);
+        ESP_LOGI(TAG, "Local transcript intent matched: %s", detail);
+        assistant_command_dispatch_t dispatch = {
+            .type = ASSISTANT_COMMAND_ACTION_HUE_GROUP,
+            .group_index = local_intent.group_index,
+            .on = local_intent.on,
+        };
+        execute_dispatch(rt, 0, &dispatch, detail);
+        return;
+    }
+#endif
 
     rt->assistant_stage = ASSISTANT_STAGE_THINKING;
     ui_status_set(UI_STATUS_WORKING, "Thinking");
@@ -744,6 +777,16 @@ esp_err_t assistant_session_init_models(assistant_runtime_t *rt) {
         ESP_LOGE(TAG, "Failed to create AFE instance");
         return ESP_FAIL;
     }
+
+#if CONFIG_ASSISTANT_WAKE_WORD_THRESHOLD > 0
+    /* The AFE's WakeNet index is 1-based, and the ESP-SR default is around 0.63 for Hi ESP. */
+    float wake_threshold = (float) CONFIG_ASSISTANT_WAKE_WORD_THRESHOLD / 100.0f;
+    if (rt->afe_handle->set_wakenet_threshold(rt->afe_data, 1, wake_threshold) == 1) {
+        ESP_LOGI(TAG, "WakeNet trigger threshold set to %.2f", wake_threshold);
+    } else {
+        ESP_LOGW(TAG, "Failed to set WakeNet trigger threshold to %.2f", wake_threshold);
+    }
+#endif
 
     rt->afe_handle->print_pipeline(rt->afe_data);
     return hue_command_runtime_rebuild(rt,

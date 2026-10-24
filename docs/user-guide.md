@@ -117,13 +117,15 @@ The configured `CONFIG_TTS_PIPER_VOLUME_PERCENT` value remains the starting volu
 
 ## Fireworks Voice Routing
 
-When Fireworks voice routing is enabled, the assistant does not use the fixed command list after the wake word. Instead it accepts a free-form request:
+When Fireworks voice routing is enabled, the assistant accepts a free-form request:
 
 1. say `Hi ESP`
 2. say a request in your own words, such as `turn off the living room` or `what is the definition of superfluous`
 3. wait while the device transcribes the request and asks the model
 4. the device runs the matching action, or shows and speaks a short answer, paging through it on screen if it is longer than one screen
 5. the device returns to standby
+
+Known Hue on/off requests are matched against the synced group list after transcription and skip the Fireworks request. Phrases such as `turn on the living room`, `switch off bedroom`, or `lights on in the kitchen` execute locally once the transcript is available.
 
 Answers are kept to a few sentences and shown for about as long as they take to speak.
 

@@ -42,6 +42,7 @@ cc -std=c11 -Wall -Wextra -Werror \
     "${ROOT_DIR}/tests/test_fireworks_response_parse.c" \
     "${ROOT_DIR}/tests/test_hue_discovery_response.c" \
     "${ROOT_DIR}/tests/test_hue_group_match.c" \
+    "${ROOT_DIR}/tests/test_hue_voice_intent.c" \
     "${ROOT_DIR}/tests/test_http_trace.c" \
     "${ROOT_DIR}/tests/test_local_stt_protocol.c" \
     "${ROOT_DIR}/tests/test_request_cancel.c" \
@@ -66,6 +67,7 @@ cc -std=c11 -Wall -Wextra -Werror \
     "${ROOT_DIR}/main/hue/hue_command_map.c" \
     "${ROOT_DIR}/main/hue/hue_discovery_response.c" \
     "${ROOT_DIR}/main/hue/hue_group_match.c" \
+    "${ROOT_DIR}/main/hue/hue_voice_intent.c" \
     "${ROOT_DIR}/main/net/http_trace.c" \
     "${ROOT_DIR}/main/stt/local_stt_protocol.c" \
     "${ROOT_DIR}/main/timer/timer_parse.c" \
