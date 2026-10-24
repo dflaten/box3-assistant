@@ -33,6 +33,7 @@ idf_component_register(
         "hue/hue_discovery_response.c"
         "hue/hue_group_match.c"
         "hue/hue_group_store.c"
+        "hue/hue_voice_intent.c"
         "net/http_trace.c"
         "net/line_socket.c"
         "stt/local_stt_client.c"

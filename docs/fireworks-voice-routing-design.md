@@ -484,6 +484,9 @@ Implemented after the first pass to protect control latency and clock questions:
 - a local MultiNet fast path that runs on the same captured audio and executes
   known phrases without STT or a model round trip, configurable through
   `CONFIG_VOICE_ROUTING_FASTPATH_ENABLED`
+- a local transcript matcher that runs after STT for conservative Hue on/off
+  requests, so known group commands still skip the model when MultiNet misses
+  the exact phrase
 - a `time_now` tool so clock questions reach the local time handler, because the
   model has no clock of its own
 

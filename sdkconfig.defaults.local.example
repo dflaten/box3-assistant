@@ -8,6 +8,11 @@ CONFIG_ASSISTANT_HOME_LOCATION_NAME="Your City, ST"
 CONFIG_ASSISTANT_HOME_LATITUDE="00.0000"
 CONFIG_ASSISTANT_HOME_LONGITUDE="00.0000"
 CONFIG_ASSISTANT_HOME_TIMEZONE="America/Chicago"
+
+# Wake word sensitivity: 0 keeps the ESP-SR model default (about 63 percent).
+# Raise only slightly (for example 66) if ordinary speech falsely wakes the device.
+CONFIG_ASSISTANT_WAKE_WORD_THRESHOLD=0
+
 CONFIG_TTS_PIPER_BASE_URL="http://tts-server.local:10200"
 CONFIG_TTS_PIPER_EVENT_SOCKET=y
 CONFIG_TTS_PIPER_TIMEOUT_MS=20000

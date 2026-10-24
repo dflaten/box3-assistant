@@ -24,6 +24,8 @@ extern const test_case_t g_hue_discovery_response_tests[];
 extern const int g_hue_discovery_response_test_count;
 extern const test_case_t g_hue_group_match_tests[];
 extern const int g_hue_group_match_test_count;
+extern const test_case_t g_hue_voice_intent_tests[];
+extern const int g_hue_voice_intent_test_count;
 extern const test_case_t g_http_trace_tests[];
 extern const int g_http_trace_test_count;
 extern const test_case_t g_local_stt_protocol_tests[];
@@ -78,6 +80,7 @@ int main(void) {
     run_test_cases(g_fireworks_response_parse_tests, g_fireworks_response_parse_test_count);
     run_test_cases(g_hue_discovery_response_tests, g_hue_discovery_response_test_count);
     run_test_cases(g_hue_group_match_tests, g_hue_group_match_test_count);
+    run_test_cases(g_hue_voice_intent_tests, g_hue_voice_intent_test_count);
     run_test_cases(g_http_trace_tests, g_http_trace_test_count);
     run_test_cases(g_local_stt_protocol_tests, g_local_stt_protocol_test_count);
     run_test_cases(g_request_cancel_tests, g_request_cancel_test_count);
