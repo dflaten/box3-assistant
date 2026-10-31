@@ -190,6 +190,7 @@ esp_err_t local_stt_client_transcribe(const uint8_t *audio_bytes,
         err = local_stt_send_event(sock, "audio-stop", NULL, NULL, 0);
     }
 
+    bool saw_transcript_event = false;
     char line[LOCAL_STT_LINE_MAX_BYTES];
     while (err == ESP_OK) {
         err = line_socket_recv_line(sock, line, sizeof(line));
@@ -286,6 +287,7 @@ esp_err_t local_stt_client_transcribe(const uint8_t *audio_bytes,
         }
 
         if (err == ESP_OK && result == LOCAL_STT_PROTOCOL_EVENT_TRANSCRIPT) {
+            saw_transcript_event = true;
             snprintf(transcript, transcript_size, "%s", resolved_text);
             ESP_LOGI(TAG, "Local STT transcript received: %s", transcript);
             cJSON_Delete(extra_data);
@@ -303,6 +305,10 @@ esp_err_t local_stt_client_transcribe(const uint8_t *audio_bytes,
     close(sock);
 
     if (err == ESP_OK && transcript[0] == '\0') {
+        if (saw_transcript_event) {
+            ESP_LOGW(TAG, "Local STT returned an empty transcript");
+            return ESP_OK;
+        }
         ESP_LOGW(TAG, "Local STT request ended without a transcript event");
         return ESP_ERR_NOT_FOUND;
     }

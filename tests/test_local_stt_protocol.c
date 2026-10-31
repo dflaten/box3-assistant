@@ -21,7 +21,7 @@ static bool test_local_stt_protocol_classifies_events(void) {
     ASSERT_EQ_INT(LOCAL_STT_PROTOCOL_EVENT_TRANSCRIPT, local_stt_protocol_classify_event("transcript", "1 minute", ""));
     ASSERT_EQ_INT(LOCAL_STT_PROTOCOL_EVENT_ERROR, local_stt_protocol_classify_event("error", "", "model unavailable"));
     ASSERT_EQ_INT(LOCAL_STT_PROTOCOL_EVENT_CONTINUE, local_stt_protocol_classify_event("ready", "", ""));
-    ASSERT_EQ_INT(LOCAL_STT_PROTOCOL_EVENT_CONTINUE, local_stt_protocol_classify_event("transcript", "", ""));
+    ASSERT_EQ_INT(LOCAL_STT_PROTOCOL_EVENT_TRANSCRIPT, local_stt_protocol_classify_event("transcript", "", ""));
     return true;
 }
 
