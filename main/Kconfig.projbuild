@@ -200,15 +200,53 @@ config VOICE_ROUTING_SILENCE_MS
     range 200 5000
     default 1200
 
-config VOICE_ROUTING_SILENCE_RMS_THRESHOLD
+config VOICE_ROUTING_SPEECH_RMS_THRESHOLD
     int "RMS amplitude that counts as speech during routed capture"
     depends on VOICE_ROUTING_EARLY_STOP_ENABLED
     range 1 32767
-    default 600
+    default 50
+    help
+      Raw PCM16 root-mean-square amplitude at or above which a routed capture
+      chunk counts as speech. A capture that never reaches this level is
+      discarded before STT or the model is called.
+
+      On the BOX-3 with CONFIG_HUE_MIC_GAIN_DB=30, room noise usually measures
+      around 10 RMS and normal speech measures roughly 150-700 RMS. The default
+      of 50 leaves margin above the noise floor without rejecting quiet speech.
+      Raise it if background noise is being sent to STT, or lower it if soft
+      speech is being discarded or reported as "I didn't catch that". Values
+      near 600 are too high for the BOX-3 microphone path and reject normal
+      commands.
+
+config VOICE_ROUTING_SILENCE_RMS_THRESHOLD
+    int "RMS amplitude below which routed capture counts as silence"
+    depends on VOICE_ROUTING_EARLY_STOP_ENABLED
+    range 1 32767
+    default 150
+    help
+      Raw PCM16 root-mean-square amplitude below which captured audio counts
+      toward CONFIG_VOICE_ROUTING_SILENCE_MS after speech has started. Audio at
+      or above this level resets the silence timer. Keep this above room-noise
+      transients and at or above CONFIG_VOICE_ROUTING_SPEECH_RMS_THRESHOLD.
+
+      On the BOX-3, steady room noise can be near 10 RMS, but fan and room
+      transients plus the tail of the wake word can briefly reach about
+      100-120 RMS. The default of 150 keeps those transients from holding the
+      capture open while staying below normal command speech, which usually
+      measures above 180 RMS.
+
+      Values lower than CONFIG_VOICE_ROUTING_SPEECH_RMS_THRESHOLD are raised to
+      that threshold automatically.
 
 config VOICE_ROUTING_FASTPATH_ENABLED
     bool "Run local command recognition during routed capture for a fast path"
-    default y
+    default n
+    help
+      Experimental. The fast path currently feeds raw microphone audio to
+      MultiNet instead of the AFE-processed stream, so recognition is
+      unreliable. It also forces the capture to stay open for
+      CONFIG_VOICE_ROUTING_FASTPATH_WINDOW_MS. Enable only for testing while
+      the fast path is being moved onto the AFE output.
 
 config VOICE_ROUTING_FASTPATH_WINDOW_MS
     int "Time allowed for the local fast path before routed understanding in ms"

@@ -60,7 +60,7 @@ CONFIG_HUE_MIC_GAIN_DB=30
 
 Lower it in steps of 2-4 dB if the device picks up distant conversation and room noise more readily than it should. Raise it if commands from across the room are missed.
 
-When routed voice capture is enabled with early stop, a wake that is not followed by audio above `CONFIG_VOICE_ROUTING_SILENCE_RMS_THRESHOLD` is discarded before STT or the model is called.
+When routed voice capture is enabled with early stop, a wake that is not followed by audio above `CONFIG_VOICE_ROUTING_SPEECH_RMS_THRESHOLD` is discarded before STT or the model is called. On the BOX-3 the room noise floor is usually around 10 RMS and normal speech measures roughly 150-700 RMS, so the tracked default is 50. Do not raise this near normal speech levels, or real commands will be discarded.
 
 `Hi ESP` is a short two-syllable phrase, so it is inherently easier to confuse than a longer wake word. Switching wake words requires enabling the matching `CONFIG_SR_WN_WN9_*` model, updating the model filter in `main/assistant/session.c`, and updating the user-facing wording in the user guide.
 
@@ -148,7 +148,7 @@ Notes:
 
 ### Routed Capture Latency
 
-The routed path pays a fixed capture window plus STT and a model round trip before a command runs. Two options shorten the common case.
+The routed path pays a fixed capture window plus STT and a model round trip before a command runs. Early capture stop shortens the common case; the experimental fast path is disabled by default.
 
 Early capture stop ends the capture once speech is followed by a quiet gap instead of always waiting for the full window:
 
@@ -156,13 +156,19 @@ Early capture stop ends the capture once speech is followed by a quiet gap inste
 CONFIG_VOICE_ROUTING_EARLY_STOP_ENABLED=y
 CONFIG_VOICE_ROUTING_MIN_CAPTURE_MS=1000
 CONFIG_VOICE_ROUTING_SILENCE_MS=1200
-CONFIG_VOICE_ROUTING_SILENCE_RMS_THRESHOLD=600
+CONFIG_VOICE_ROUTING_SPEECH_RMS_THRESHOLD=50
+CONFIG_VOICE_ROUTING_SILENCE_RMS_THRESHOLD=150
 ```
 
-- `CONFIG_VOICE_ROUTING_SILENCE_RMS_THRESHOLD` is a raw PCM16 root-mean-square amplitude and depends on microphone gain; raise it if background noise counts as speech, lower it if speech is missed
+- `CONFIG_VOICE_ROUTING_SPEECH_RMS_THRESHOLD` is the gate for whether a capture contains speech at all. A capture that never reaches it is discarded with `I didn't catch that` before STT runs. With the default `CONFIG_HUE_MIC_GAIN_DB=30`, BOX-3 room noise is usually near 10 RMS and normal speech measures roughly 150-700 RMS, so keep the speech threshold below the quietest speech you expect; 40-80 is a good range
+- `CONFIG_VOICE_ROUTING_SILENCE_RMS_THRESHOLD` is the level that resets the trailing-silence timer after speech starts. Audio below it counts toward `CONFIG_VOICE_ROUTING_SILENCE_MS`; audio at or above it resets the timer. Keep it above room-noise transients and at or above the speech threshold
+- on the BOX-3, steady noise can be near 10 RMS, but fan and room transients plus the tail of the wake word can briefly reach about 100-120 RMS. The default of `150` keeps those transients from holding the capture open while staying below normal command speech, which usually measures above 180 RMS
+- values lower than the speech threshold are raised to it automatically
+- raising the speech threshold toward normal speech levels causes valid utterances to be discarded before STT. Values around 600 are too high for the BOX-3 microphone path
+- lowering the silence threshold too far lets room noise prevent early stop, so the capture runs to `CONFIG_VOICE_ROUTING_CAPTURE_MS`
 - `CONFIG_VOICE_ROUTING_CAPTURE_MS` remains the hard upper bound even when early stop is enabled
 
-The local fast path runs MultiNet on the same captured audio, so a recognized phrase such as `turn off living room` or `what time is it` executes locally in about a second while free-form questions still fall through to STT and the model:
+The local fast path is experimental and disabled by default. When enabled, it runs MultiNet on the same captured audio, so a recognized phrase such as `turn off living room` or `what time is it` can execute locally without STT:
 
 ```text
 CONFIG_VOICE_ROUTING_FASTPATH_ENABLED=y
@@ -170,8 +176,10 @@ CONFIG_VOICE_ROUTING_FASTPATH_WINDOW_MS=3000
 CONFIG_VOICE_ROUTING_FASTPATH_MIN_CONFIDENCE=90
 ```
 
+- the fast path feeds the recognizer raw microphone audio rather than the processed audio front end, so recognition is unreliable on the current BOX-3 path; it is disabled by default until it can run on the AFE-processed stream
+- enabling it also forces the capture to stay open for `CONFIG_VOICE_ROUTING_FASTPATH_WINDOW_MS`, which adds latency even when no local match fires
 - `CONFIG_VOICE_ROUTING_FASTPATH_MIN_CONFIDENCE` is a percent and gates the accepted local match to reduce false positives
-- the fast path feeds the recognizer raw microphone audio rather than the processed audio front end, so validate its accuracy on device and lower `CONFIG_VOICE_ROUTING_FASTPATH_WINDOW_MS` or disable the fast path if it misfires
+- when the window expires, the firmware logs the best probability seen so the threshold can be tuned without guessing
 - capture always continues to the STT path when no confident local match is found, so no audio is lost
 
 After STT completes, a second local matcher checks conservative Hue on/off requests such as `turn on the living room`, `switch off bedroom`, or `lights on in the kitchen` against the synced group list before calling Fireworks. It uses fuzzy group-name matching, so partial names and extra words like `lights` are accepted, while questions, multi-clause requests, and unknown groups fall through to the model.

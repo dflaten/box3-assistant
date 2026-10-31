@@ -25,6 +25,8 @@ bool local_stt_protocol_select_string(const char *preferred, const char *fallbac
  * @param text Resolved transcript text for the event, if any.
  * @param message Resolved error message for the event, if any.
  * @return The high-level result of the event.
+ * @note A `transcript` event with empty text is still classified as a transcript so callers can stop waiting
+ * immediately instead of blocking until the socket timeout.
  */
 local_stt_protocol_event_result_t
 local_stt_protocol_classify_event(const char *event_type, const char *text, const char *message);

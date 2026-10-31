@@ -19,6 +19,9 @@ typedef struct {
     uint32_t trailing_silence_ms;
     /** Root-mean-square amplitude at or above which a chunk counts as speech. */
     int32_t rms_threshold;
+    /** Root-mean-square amplitude below which a chunk counts toward trailing silence after speech.
+     *  Values below rms_threshold are raised to rms_threshold during initialization. */
+    int32_t silence_rms_threshold;
 } capture_endpoint_config_t;
 
 /**
@@ -31,6 +34,10 @@ typedef struct {
     uint32_t elapsed_ms;
     /** Milliseconds of trailing sub-threshold audio after the last speech chunk. */
     uint32_t silent_ms;
+    /** Highest chunk root-mean-square amplitude observed during the capture. */
+    uint32_t peak_rms;
+    /** Lowest chunk root-mean-square amplitude observed during the capture. */
+    uint32_t min_rms;
     /** True once any chunk has crossed the speech threshold. */
     bool speech_detected;
 } capture_endpoint_t;

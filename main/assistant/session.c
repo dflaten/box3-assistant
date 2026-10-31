@@ -412,6 +412,8 @@ typedef struct {
     uint32_t window_ms;
     /** Minimum probability required to accept a local match. */
     float min_confidence;
+    /** Highest probability reported during the window, for tuning diagnostics. */
+    float best_confidence;
     /** True once a confident local command was accepted. */
     bool matched;
     /** True once the fast path stopped feeding the recognizer for this capture. */
@@ -466,6 +468,9 @@ static bool routed_fastpath_on_chunk(void *context, const int16_t *samples, size
                 detected = true;
                 confidence = results->prob[0];
                 command_id = results->command_id[0];
+                if (confidence > fast->best_confidence) {
+                    fast->best_confidence = confidence;
+                }
             }
         }
 
@@ -489,6 +494,11 @@ static bool routed_fastpath_on_chunk(void *context, const int16_t *samples, size
         }
         if (action == ASSISTANT_FASTPATH_DEFER) {
             fast->deferred = true;
+            ESP_LOGI(TAG,
+                     "Fast-path deferred: best_prob=%.3f below_min=%.3f window_ms=%lu",
+                     fast->best_confidence,
+                     fast->min_confidence,
+                     (unsigned long) fast->window_ms);
             return false;
         }
         /* Do not reset the recognizer here: it accumulates audio across detect() calls, so a reset would discard the
@@ -538,7 +548,8 @@ static void routed_session_run(assistant_runtime_t *rt) {
         .min_capture_ms = min_capture_ms,
         .max_capture_ms = CONFIG_VOICE_ROUTING_CAPTURE_MS,
         .trailing_silence_ms = CONFIG_VOICE_ROUTING_SILENCE_MS,
-        .rms_threshold = CONFIG_VOICE_ROUTING_SILENCE_RMS_THRESHOLD,
+        .rms_threshold = CONFIG_VOICE_ROUTING_SPEECH_RMS_THRESHOLD,
+        .silence_rms_threshold = CONFIG_VOICE_ROUTING_SILENCE_RMS_THRESHOLD,
     };
     capture_endpoint_init(&endpoint, &endpoint_config);
     endpoint_ptr = &endpoint;
@@ -554,6 +565,7 @@ static void routed_session_run(assistant_runtime_t *rt) {
         .accum_count = 0,
         .window_ms = CONFIG_VOICE_ROUTING_FASTPATH_WINDOW_MS,
         .min_confidence = (float) CONFIG_VOICE_ROUTING_FASTPATH_MIN_CONFIDENCE / 100.0f,
+        .best_confidence = 0.0f,
         .matched = false,
         .deferred = false,
         .command_id = 0,
@@ -596,9 +608,24 @@ static void routed_session_run(assistant_runtime_t *rt) {
     }
 
 #ifdef CONFIG_VOICE_ROUTING_EARLY_STOP_ENABLED
+    ESP_LOGI(TAG,
+             "Routed capture complete: captured_ms=%lu speech=%s min_rms=%lu peak_rms=%lu silent_ms=%lu "
+             "speech_threshold=%d silence_threshold=%d",
+             (unsigned long) ((pcm_size / sizeof(int16_t)) * 1000ULL / ROUTED_SAMPLE_RATE_HZ),
+             endpoint.speech_detected ? "yes" : "no",
+             (unsigned long) (endpoint.min_rms == UINT32_MAX ? 0 : endpoint.min_rms),
+             (unsigned long) endpoint.peak_rms,
+             (unsigned long) endpoint.silent_ms,
+             CONFIG_VOICE_ROUTING_SPEECH_RMS_THRESHOLD,
+             CONFIG_VOICE_ROUTING_SILENCE_RMS_THRESHOLD);
+
     /* A false wake followed by silence or sub-threshold noise should not reach STT or the model. */
     if (!endpoint.speech_detected) {
-        ESP_LOGI(TAG, "Ignoring wake with no speech above the capture threshold");
+        ESP_LOGI(TAG,
+                 "Ignoring wake with no speech above the capture threshold: captured_ms=%lu peak_rms=%lu threshold=%d",
+                 (unsigned long) endpoint.elapsed_ms,
+                 (unsigned long) endpoint.peak_rms,
+                 CONFIG_VOICE_ROUTING_SPEECH_RMS_THRESHOLD);
         free(pcm);
         assistant_session_show_status_then_return_to_standby(
             rt, UI_STATUS_READY, "I didn't catch that", STATUS_HOLD_TIME);
@@ -617,7 +644,7 @@ static void routed_session_run(assistant_runtime_t *rt) {
     }
     if (transcript[0] == '\0') {
         assistant_session_show_status_then_return_to_standby(
-            rt, UI_STATUS_ERROR, "I didn't catch that", STATUS_HOLD_TIME);
+            rt, UI_STATUS_READY, "I didn't catch that", STATUS_HOLD_TIME);
         return;
     }
 

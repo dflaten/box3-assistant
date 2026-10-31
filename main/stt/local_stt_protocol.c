@@ -22,6 +22,7 @@ bool local_stt_protocol_select_string(const char *preferred, const char *fallbac
 
 local_stt_protocol_event_result_t
 local_stt_protocol_classify_event(const char *event_type, const char *text, const char *message) {
+    (void) text;
     if (event_type == NULL) {
         return LOCAL_STT_PROTOCOL_EVENT_CONTINUE;
     }
@@ -31,7 +32,9 @@ local_stt_protocol_classify_event(const char *event_type, const char *text, cons
         return LOCAL_STT_PROTOCOL_EVENT_ERROR;
     }
 
-    if (strcmp(event_type, "transcript") == 0 && text != NULL && text[0] != '\0') {
+    /* An empty transcript is still a terminal result: waiting for another event would block until the socket times
+     * out even though the server has already reported that it heard nothing. */
+    if (strcmp(event_type, "transcript") == 0) {
         return LOCAL_STT_PROTOCOL_EVENT_TRANSCRIPT;
     }
 
