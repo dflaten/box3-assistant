@@ -39,7 +39,11 @@ The firmware discovers and caches the Hue bridge address automatically, so a Hue
 
 ## Wake Word Sensitivity
 
-The wake word is detected locally by WakeNet. The tracked defaults use the full `wn9_hiesp` model, which is the ESP32-S3 model. The smaller `wn9s_hiesp` model is intended for chips without PSRAM or SIMD and is more likely to accept background speech as a wake word.
+The wake word is detected locally by WakeNet. The tracked defaults use the `wn10_hiesp` model from ESP-SR 2.6.1. The older `wn9_hiesp` model is still available as a fallback. The smaller `wn9s_hiesp` model is intended for chips without PSRAM or SIMD and is more likely to accept background speech as a wake word.
+
+The tracked dependency pair is `esp-sr 2.6.1` with `esp-dl 3.3.14`. Keep the `esp-dl` pin explicit: `3.3.15` boot-loops with `wn10_hiesp` in `wakenetx_create`, and `3.3.12` does not link against ESP-SR 2.6.1.
+
+The tracked wake-word trial currently uses `CONFIG_ASSISTANT_WAKE_WORD_THRESHOLD=60` and `CONFIG_HUE_MIC_GAIN_DB=24`.
 
 If ordinary conversation falsely wakes the device, raise the WakeNet trigger threshold:
 
@@ -47,7 +51,7 @@ If ordinary conversation falsely wakes the device, raise the WakeNet trigger thr
 CONFIG_ASSISTANT_WAKE_WORD_THRESHOLD=66
 ```
 
-- the value is a percentage and `0` keeps the ESP-SR model default, which is about 63 percent for `Hi ESP`
+- the value is a percentage and `0` keeps the ESP-SR model default, which is about 59 percent for mode 90 and about 62 percent for mode 95 with `wn10_hiesp`
 - raise it only in small steps, such as `65`, `66`, or `68`; values around `75` or higher can suppress real detections entirely
 - lower it back toward `0` if the wake word is missed
 - this threshold applies to the raw WakeNet score, so a small change has a noticeable effect
@@ -62,7 +66,7 @@ Lower it in steps of 2-4 dB if the device picks up distant conversation and room
 
 When routed voice capture is enabled with early stop, a wake that is not followed by audio above `CONFIG_VOICE_ROUTING_SPEECH_RMS_THRESHOLD` is discarded before STT or the model is called. On the BOX-3 the room noise floor is usually around 10 RMS and normal speech measures roughly 150-700 RMS, so the tracked default is 50. Do not raise this near normal speech levels, or real commands will be discarded.
 
-`Hi ESP` is a short two-syllable phrase, so it is inherently easier to confuse than a longer wake word. Switching wake words requires enabling the matching `CONFIG_SR_WN_WN9_*` model, updating the model filter in `main/assistant/session.c`, and updating the user-facing wording in the user guide.
+`Hi ESP` is a short two-syllable phrase, so it is inherently easier to confuse than a longer wake word. Switching wake words requires enabling the matching `CONFIG_SR_WN_WN9_*` or `CONFIG_SR_WN_WN10_*` model, updating the model filter in `main/assistant/session.c`, and updating the user-facing wording in the user guide.
 
 ## Home Location
 
