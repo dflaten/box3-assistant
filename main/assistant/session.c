@@ -785,7 +785,9 @@ esp_err_t assistant_session_init_models(assistant_runtime_t *rt) {
 
     afe_cfg->wakenet_init = true;
     afe_cfg->wakenet_model_name = wn_name;
-    afe_cfg->wakenet_mode = DET_MODE_2CH_90;
+    /* WakeNet10 does not support the 2CH detection modes. The AFE still uses both microphones for its
+     * front-end processing because the input format is "MM". */
+    afe_cfg->wakenet_mode = DET_MODE_95;
     afe_cfg->vad_init = true;
     afe_cfg->memory_alloc_mode = AFE_MEMORY_ALLOC_MORE_PSRAM;
     afe_cfg->afe_ringbuf_size = 50;

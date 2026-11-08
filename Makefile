@@ -27,7 +27,7 @@ test:
 	./tests/run_unit_tests.sh
 
 config-local:
-	$(call FISH_RUN,set -x SDKCONFIG_DEFAULTS "sdkconfig.defaults;sdkconfig.defaults.local"; rm -f sdkconfig sdkconfig.old; idf.py reconfigure)
+	$(call FISH_RUN,set -x IDF_TARGET esp32s3; set -x SDKCONFIG_DEFAULTS "sdkconfig.defaults;sdkconfig.defaults.local"; rm -f sdkconfig sdkconfig.old; idf.py reconfigure)
 
 build:
 	$(call FISH_RUN,idf.py build)
